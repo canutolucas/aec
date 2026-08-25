@@ -79,16 +79,24 @@ Antes de desligar o Excel:
 
 ## Formatos de extrato aceitos
 
-| Formato | Identificador da transacao | Nome da contraparte | Recomendacao |
-|---|---|---|---|
-| **OFX** | FITID do banco | completo | **prefira este** |
-| CSV | nenhum | completo | bom, com o mapeamento de colunas configurado |
-| PDF (Cora) | nenhum | **truncado** | ultimo recurso |
+| Formato | Identificador da transacao | Nome da contraparte | CNPJ/CPF | Recomendacao |
+|---|---|---|---|---|
+| **OFX** | FITID do banco | completo | sim | **prefira este** |
+| CSV | nenhum | completo | depende do banco | bom, com o mapeamento configurado |
+| PDF (Cora) | nenhum | **truncado** | sim | ultimo recurso |
 
 Peca OFX ao banco sempre que ele oferecer. O FITID e um identificador que o
 proprio banco atribui a cada transacao, o que torna a deduplicacao exata: sem
 ele, reimportar um periodo que se sobrepoe depende de comparar data, valor e
 historico, e dois pagamentos identicos no mesmo dia ficam indistinguiveis.
+
+Os dois leitores foram validados um contra o outro com o **mesmo mes** do mesmo
+banco, em PDF e em OFX. Eles nao compartilham codigo de leitura — um interpreta
+geometria de pagina, o outro interpreta tags — e mesmo assim concordam nas 43
+transacoes, transacao a transacao, no documento de cada contraparte, no periodo
+coberto e no saldo. O saldo inicial que o OFX apenas implica (saldo final menos o
+movimento) coincide ao centavo com o que o PDF declara diretamente. Se algum dos
+dois tivesse perdido ou duplicado uma linha, nao coincidiriam.
 
 ### Sobre o PDF
 
@@ -108,7 +116,9 @@ formato:
 
 **O CNPJ/CPF vem inteiro, mesmo quando o nome vem cortado.** Ele e uma chave
 melhor do que o nome jamais seria: nao muda, nao abrevia e nao depende de como o
-banco escreveu. Monte as regras de categorizacao pelo documento.
+banco escreveu. Monte as regras de categorizacao pelo documento — vale para os
+dois formatos, ja que o leitor de OFX tambem extrai o documento do historico
+quando o banco o escreve la.
 
 **O extrato declara os totais e o saldo de cada dia, e o leitor refaz essas
 contas.** Isso ataca o pior modo de falha de um leitor de PDF, que nao e quebrar
@@ -117,10 +127,28 @@ plausivel, e a diferenca so apareceria no fechamento, quando ninguem mais liga
 uma coisa a outra. Aqui a conferencia aponta *em que dia* a leitura divergiu, na
 hora da importacao.
 
-O leitor tambem detecta extrato parcial: um PDF gerado no dia 25 declara cobrir o
-mes inteiro, mas so atesta ate o dia 25. Importar 31/08 como fim do periodo faria
-o sistema tratar agosto como coberto, e os dias 26 a 31 nunca seriam cobrados de
+### Extrato parcial
+
+Os dois leitores detectam quando o arquivo cobre menos do que diz cobrir. Um
+extrato pedido no dia 25 para o mes inteiro sai declarando 01 a 31, mas nao tem
+como conter o que ainda nao aconteceu. Importar 31/08 como fim do periodo faria o
+sistema tratar agosto como coberto, e os dias 26 a 31 nunca seriam cobrados de
 ninguem.
+
+Cada leitor chega a mesma conclusao por um caminho: o do PDF pelo ultimo saldo
+diario impresso, o do OFX pela data de geracao no `DTSERVER`. No OFX o corte e
+pela data de geracao, e nao pelo ultimo lancamento, de proposito — nao haver
+movimento nos ultimos dias e informacao legitima do extrato, nao lacuna.
+
+### O que cada formato consegue provar
+
+O PDF traz o saldo de cada dia, entao o leitor prova sozinho que nao perdeu
+nenhuma linha, e diz em que dia divergiu.
+
+O OFX traz o saldo final mas nao o inicial, entao o arquivo **nao se prova
+sozinho** — ele afirma um total. O leitor registra o saldo inicial *implicado*
+(final menos o movimento) para a aplicacao confrontar com o saldo que ela ja tem
+para a conta na vespera. E a mesma conferencia, fechada do lado de fora.
 
 ### Extratos reais nos testes
 

@@ -14,9 +14,14 @@
  */
 
 import { type IsoDate, isIsoDate } from "@/lib/domain/dates";
-import { type Cents, fromDb } from "@/lib/domain/money";
+import { type Cents, fromDb, sum } from "@/lib/domain/money";
 import { assignDedupKeys } from "./dedup";
-import { type CanonicalLine, type CanonicalStatement, ImportError } from "./types";
+import {
+  type CanonicalLine,
+  type CanonicalStatement,
+  ImportError,
+  type StatementIntegrity,
+} from "./types";
 
 interface OfxNode {
   readonly tag: string;
@@ -187,6 +192,20 @@ export function parseOfxAmount(value: string): Cents {
   return fromDb(normalized.replace(/^\+/, ""));
 }
 
+/**
+ * CNPJ ou CPF em qualquer lugar do memo.
+ *
+ * Extracao deliberadamente generica: um documento no memo e inequivoco em
+ * qualquer banco, entao vale a pena procurar sempre. O NOME nao e extraido —
+ * cada banco monta o memo do seu jeito, e recortar nome por posicao daria certo
+ * em um e errado nos outros. Quando o banco poe o documento, ele e a chave mais
+ * confiavel de contraparte que existe: nao muda, nao abrevia e nao e truncado.
+ */
+function documentoNoMemo(memo: string): string | undefined {
+  const encontrado = /(?<![\d.])(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2})(?![\d-])/.exec(memo);
+  return encontrado ? encontrado[1]!.replace(/\D/g, "") : undefined;
+}
+
 export function parseOfx(input: string | Uint8Array): CanonicalStatement {
   const content = typeof input === "string" ? input : decodeOfx(input);
 
@@ -229,6 +248,7 @@ export function parseOfx(input: string | Uint8Array): CanonicalStatement {
         memo: combined,
         fitid: childValue(node, "FITID"),
         checkNumber: childValue(node, "CHECKNUM"),
+        counterpartyDocument: documentoNoMemo(combined),
       }];
     } catch (error) {
       warnings.push(
@@ -247,17 +267,107 @@ export function parseOfx(input: string | Uint8Array): CanonicalStatement {
     );
   }
 
+  const declaredStart = readDate(transactionList, "DTSTART");
+  const declaredEnd = readDate(transactionList, "DTEND");
+  const declaredClosing = ledger ? readAmount(ledger, "BALAMT") : undefined;
+  const declaredClosingDate = readDate(ledger, "DTASOF");
+
+  // Data em que o banco gerou o arquivo. E a chave para nao acreditar em um
+  // periodo que o extrato nao pode atestar.
+  const geradoEm = readDate(findFirst(root, "SONRS"), "DTSERVER");
+
+  // O periodo que o extrato ATESTA nao e o que ele declara.
+  //
+  // Um arquivo pedido no dia 25 para o mes inteiro sai com DTEND no dia 31, e o
+  // LEDGERBAL com DTASOF no dia 31, mas nao tem como conter o que ainda nao
+  // aconteceu. Gravar 31 faria o sistema tratar o mes como coberto, e os dias
+  // seguintes nunca seriam cobrados de ninguem.
+  //
+  // Repare que o corte e pela data de GERACAO, e nao pelo ultimo lancamento:
+  // ausencia de movimento entre o dia 21 e o 25 e informacao legitima do extrato,
+  // e nao lacuna.
+  const periodEnd =
+    declaredEnd !== undefined && geradoEm !== undefined && geradoEm < declaredEnd
+      ? geradoEm
+      : declaredEnd;
+
+  if (declaredEnd !== undefined && periodEnd !== undefined && periodEnd < declaredEnd) {
+    warnings.push(
+      `O arquivo diz cobrir ate ${formatarData(declaredEnd)}, mas foi gerado em ` +
+        `${formatarData(periodEnd)} e nao pode conter o que veio depois. O periodo importado vai ` +
+        "ate a data de geracao; peca o extrato do restante antes de fechar o mes.",
+    );
+  }
+
+  const integrity = conferir(lines, declaredClosing);
+  if (!integrity.ok) warnings.push(...integrity.problems);
+
+  const comDocumento = lines.filter((line) => line.counterpartyDocument !== undefined).length;
+  if (comDocumento > 0) {
+    warnings.push(
+      `${comDocumento} de ${lines.length} transacoes trazem CNPJ ou CPF no historico. ` +
+        "Regras de categorizacao por documento sao mais confiaveis que por nome.",
+    );
+  }
+
   return {
     source: "ofx",
     bankId: account ? childValue(account, "BANKID") : undefined,
     accountId: account ? childValue(account, "ACCTID") : undefined,
-    periodStart: readDate(transactionList, "DTSTART"),
-    periodEnd: readDate(transactionList, "DTEND"),
-    ledgerBalance: ledger ? readAmount(ledger, "BALAMT") : undefined,
-    ledgerBalanceDate: readDate(ledger, "DTASOF"),
+    periodStart: declaredStart,
+    periodEnd,
+    ledgerBalance: declaredClosing,
+    // Nao o DTASOF cru: se o arquivo foi gerado antes, o saldo e daquela data.
+    ledgerBalanceDate:
+      declaredClosingDate !== undefined && geradoEm !== undefined && geradoEm < declaredClosingDate
+        ? geradoEm
+        : declaredClosingDate,
     lines,
+    integrity,
     warnings,
   };
+}
+
+/**
+ * Confere o que da para conferir em um OFX.
+ *
+ * Menos do que um PDF permite, e vale ser explicito sobre isso: o OFX traz o
+ * saldo final (LEDGERBAL) mas nao o inicial, e nao traz saldo por dia. Sem o
+ * saldo de partida, o arquivo nao consegue provar sozinho que nenhuma transacao
+ * se perdeu — ele so afirma um total.
+ *
+ * O que fica registrado e o saldo inicial IMPLICADO: saldo final menos o
+ * movimento lido. A aplicacao compara esse numero com o saldo que ela ja tem
+ * para a conta na vespera do periodo; batendo, o extrato esta integro. E a mesma
+ * conferencia do PDF, so que fechada do lado de fora.
+ */
+function conferir(
+  lines: readonly CanonicalLine[],
+  declaredClosing: Cents | undefined,
+): StatementIntegrity {
+  const computedInflow = sum(lines.filter((line) => line.amount > 0).map((line) => line.amount));
+  const computedOutflow = -sum(lines.filter((line) => line.amount < 0).map((line) => line.amount));
+
+  return {
+    declaredClosing,
+    // Saldo inicial implicado pelo arquivo, para a aplicacao confrontar.
+    declaredOpening:
+      declaredClosing === undefined
+        ? undefined
+        : declaredClosing - (computedInflow - computedOutflow),
+    computedInflow,
+    computedOutflow,
+    computedClosing: declaredClosing,
+    dailyChecks: [],
+    ok: true,
+    problems: [],
+  };
+}
+
+/** 2026-08-25 -> 25/08/2026 */
+function formatarData(data: IsoDate): string {
+  const [ano, mes, dia] = data.split("-");
+  return `${dia}/${mes}/${ano}`;
 }
 
 function readDate(node: OfxNode | undefined, tag: string): IsoDate | undefined {

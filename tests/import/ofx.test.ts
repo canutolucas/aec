@@ -225,3 +225,141 @@ describe("deduplicacao sem FITID", () => {
     expect(extrato.lines[0]!.dedupKey).not.toBe(extrato.lines[1]!.dedupKey);
   });
 });
+
+/**
+ * Casos aprendidos com um OFX real do Cora.
+ *
+ * A fixture e anonimizada (gerada por tests/local/gerar-fixture-ofx.test.ts) mas
+ * preserva o que caracteriza o arquivo do banco: cabecalho SGML com tags de
+ * fechamento no estilo XML, ENCODING:UTF-8 sem CHARSET, DTSERVER anterior ao
+ * DTEND, FITID em UUID e memo no formato "tipo - nome - documento".
+ */
+describe("OFX real do Cora", () => {
+  const extrato = parseOfx(fixture("extrato-cora.ofx"));
+
+  it("le o dialeto hibrido: cabecalho SGML com tags fechadas", () => {
+    // O arquivo declara DATA:OFXSGML e VERSION:102, mas fecha todas as tags como
+    // XML. Nem o caminho puramente SGML nem o puramente XML dariam conta sozinhos.
+    expect(extrato.lines).toHaveLength(43);
+    expect(extrato.bankId).toBe("0403");
+    expect(extrato.accountId).toBe("12345678");
+  });
+
+  it("respeita ENCODING:UTF-8 declarado sem CHARSET", () => {
+    const comAcento = extrato.lines.filter((linha) => /[áéíóúâêôãõç]/i.test(linha.memo));
+    expect(comAcento.length).toBeGreaterThan(0);
+  });
+
+  it("preserva & cru no memo, que e valido em SGML", () => {
+    // Em XML, um & solto seria erro. Em SGML nao e, e o banco escreve assim.
+    expect(extrato.lines.some((linha) => linha.memo.includes(" & "))).toBe(true);
+  });
+
+  it("usa o FITID como chave de deduplicacao, sem colisao", () => {
+    expect(extrato.lines.every((linha) => linha.dedupKey.startsWith("fitid:"))).toBe(true);
+    expect(new Set(extrato.lines.map((l) => l.dedupKey)).size).toBe(43);
+  });
+
+  it("nao desloca a data por causa do fuso declarado", () => {
+    // As datas vem como 20260801000000[0:GMT]. Meia-noite GMT e 21h do dia
+    // ANTERIOR no Brasil: tratar como instante jogaria todo lancamento um dia
+    // para tras e o mes fecharia errado.
+    expect(extrato.lines.map((l) => l.postedAt).every((d) => d >= "2026-08-01" && d <= "2026-08-31")).toBe(true);
+    expect(extrato.lines.some((linha) => linha.postedAt === "2026-08-01")).toBe(true);
+  });
+});
+
+describe("periodo que o OFX de fato atesta", () => {
+  const extrato = parseOfx(fixture("extrato-cora.ofx"));
+
+  it("corta o periodo na data de geracao, e nao no DTEND declarado", () => {
+    // O arquivo declara DTEND em 31/08 e LEDGERBAL com DTASOF em 31/08, mas foi
+    // gerado em 25/08 — nao pode conter o que ainda nao aconteceu. Gravar 31/08
+    // faria o sistema tratar agosto como coberto, e os dias 26 a 31 nunca seriam
+    // cobrados de ninguem.
+    expect(extrato.periodStart).toBe("2026-08-01");
+    expect(extrato.periodEnd).toBe("2026-08-25");
+    expect(extrato.ledgerBalanceDate).toBe("2026-08-25");
+  });
+
+  it("avisa que o periodo declarado nao foi coberto", () => {
+    expect(extrato.warnings.join(" ")).toMatch(/diz cobrir ate 31\/08\/2026/);
+    expect(extrato.warnings.join(" ")).toMatch(/peca o extrato do restante/);
+  });
+
+  it("corta pela data de geracao, e nao pelo ultimo lancamento", () => {
+    // A diferenca importa: nao haver movimento entre o dia 21 e o 25 e
+    // informacao legitima do extrato, nao lacuna. Cortar no ultimo lancamento
+    // encolheria o periodo coberto sem motivo.
+    const ultimo = extrato.lines[extrato.lines.length - 1]!.postedAt;
+    expect(extrato.periodEnd).toBe("2026-08-25");
+    expect(extrato.periodEnd! >= ultimo).toBe(true);
+  });
+
+  it("mantem o DTEND quando o arquivo foi gerado depois do fim do periodo", () => {
+    const completo = fixture("extrato-cora.ofx").replace(
+      "<DTSERVER>20260825172645[0:GMT]</DTSERVER>",
+      "<DTSERVER>20260901090000[0:GMT]</DTSERVER>",
+    );
+    const extrato = parseOfx(completo);
+
+    expect(extrato.periodEnd).toBe("2026-08-31");
+    expect(extrato.warnings.join(" ")).not.toMatch(/diz cobrir ate/);
+  });
+});
+
+describe("contraparte a partir do memo", () => {
+  const extrato = parseOfx(fixture("extrato-cora.ofx"));
+
+  it("extrai o CNPJ ou CPF que o banco escreveu no historico", () => {
+    // Documento no memo e inequivoco em qualquer banco, entao vale procurar
+    // sempre. E a chave mais confiavel de contraparte: nao muda, nao abrevia e
+    // nao vem truncada como o nome no PDF.
+    expect(extrato.lines.every((linha) => linha.counterpartyDocument !== undefined)).toBe(true);
+    expect(
+      extrato.lines.every((linha) => /^\d{11}$|^\d{14}$/.test(linha.counterpartyDocument!)),
+    ).toBe(true);
+  });
+
+  it("distingue CPF de CNPJ", () => {
+    const tamanhos = new Set(extrato.lines.map((l) => l.counterpartyDocument!.length));
+    expect(tamanhos.has(14)).toBe(true);
+    expect(tamanhos.has(11)).toBe(true);
+  });
+
+  it("nao inventa documento quando o memo nao tem", () => {
+    const semDocumento = parseOfx(
+      "<OFX><BANKTRANLIST><STMTTRN><DTPOSTED>20250305<TRNAMT>-100.00<FITID>X1" +
+        "<MEMO>TARIFA MENSAL</STMTTRN></BANKTRANLIST></OFX>",
+    );
+    expect(semDocumento.lines[0]!.counterpartyDocument).toBeUndefined();
+  });
+
+  it("nao extrai o nome, que cada banco formata do seu jeito", () => {
+    // Recortar nome por posicao acertaria no Cora e erraria nos outros. O
+    // documento e generico; o nome nao e.
+    expect(extrato.lines.every((linha) => linha.counterpartyName === undefined)).toBe(true);
+  });
+});
+
+describe("o que o OFX consegue e o que nao consegue provar", () => {
+  const extrato = parseOfx(fixture("extrato-cora.ofx"));
+
+  it("declara o saldo final, mas nao o inicial", () => {
+    // Sem saldo de partida, o arquivo nao prova sozinho que nenhuma transacao se
+    // perdeu — ele so afirma um total. E menos do que o PDF permite conferir.
+    expect(extrato.ledgerBalance).toBeDefined();
+    expect(extrato.integrity!.dailyChecks).toEqual([]);
+  });
+
+  it("registra o saldo inicial implicado, para a aplicacao confrontar", () => {
+    // saldo final menos o movimento lido = saldo que a conta tinha na vespera.
+    // A aplicacao compara com o saldo que ela ja tem; batendo, o extrato esta
+    // integro. E a conferencia do PDF, fechada do lado de fora.
+    const integridade = extrato.integrity!;
+    const movimento = integridade.computedInflow - integridade.computedOutflow;
+
+    expect(integridade.declaredOpening).toBe(integridade.declaredClosing! - movimento);
+    expect(toDb(integridade.declaredOpening!)).toBe("2780.45");
+  });
+});
