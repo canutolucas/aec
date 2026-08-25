@@ -5,6 +5,9 @@
 #
 #   ./tests/sql/run.sh
 #
+# O Postgres recusa rodar como root. Se voce for root, chame por outro usuario:
+#   su postgres -c 'PGTEST_DIR=/tmp/aec-pgtest bash tests/sql/run.sh'
+#
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -40,3 +43,27 @@ done
 
 psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$ROOT/tests/sql/10_schema_test.sql" 2>&1 \
   | sed -e 's/^psql:[^ ]*: NOTICE:  //' -e '/^NOTICE:  /s/^NOTICE:  //'
+
+# Os seeds sao aplicados em um banco limpo, separado dos testes: eles precisam
+# rodar sem erro em producao-de-mentira, e um seed quebrado so apareceria quando
+# alguem novo tentasse subir o projeto.
+echo ""
+echo "== Seeds de desenvolvimento =="
+psql -q -c "create database ${DB}_seed;" postgres
+psql -v ON_ERROR_STOP=1 -q -d "${DB}_seed" -c "create extension if not exists pgcrypto;"
+psql -v ON_ERROR_STOP=1 -q -d "${DB}_seed" -f "$ROOT/tests/sql/00_supabase_stub.sql"
+for migration in "$ROOT"/supabase/migrations/*.sql; do
+  psql -v ON_ERROR_STOP=1 -q -d "${DB}_seed" -f "$migration" 2>&1 \
+    | grep -v 'already exists, skipping' || true
+done
+psql -v ON_ERROR_STOP=1 -q -d "${DB}_seed" -f "$ROOT/supabase/seed.sql" > /dev/null
+psql -q -t -d "${DB}_seed" -c "
+  select '  ok: ' || count(*) || ' lancamentos, ' ||
+         (select count(*) from public.bank_accounts) || ' contas, ' ||
+         (select count(*) from public.companies) || ' empresas'
+    from public.transactions;
+  select '  ok: saldo consolidado da primeira empresa: R$ ' ||
+         round(sum(current_balance), 2)::text
+    from public.v_account_balances
+   where company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+"

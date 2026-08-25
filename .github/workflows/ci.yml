@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  aplicacao:
+    name: Typecheck, lint, testes e build
+    runs-on: ubuntu-latest
+    env:
+      # Valores de fachada: o build nao acessa o Supabase, mas os clientes
+      # exigem as variaveis definidas para nao falharem na importacao.
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: chave-de-ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Testes de dominio e importacao
+        run: npm run test
+
+      - name: Build de producao
+        run: npm run build
+
+  banco:
+    name: Schema, RLS e seeds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sobe um Postgres descartavel e aplica as migrations. Nao usa Docker nem
+      # o Supabase CLI: o stub em tests/sql/00_supabase_stub.sql fornece o que o
+      # Supabase daria pronto (schema auth, auth.uid() e os papeis do PostgREST).
+      - name: Instalar PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16
+
+      # Roda como o proprio usuario do runner: o Postgres so recusa rodar como
+      # root, e o runner nao e root. Trocar para o usuario `postgres` traria
+      # problema de permissao de leitura do workspace, sem ganho nenhum.
+      - name: Testes de schema, RLS e seeds
+        env:
+          PGBIN: /usr/lib/postgresql/16/bin
+        run: bash tests/sql/run.sh
