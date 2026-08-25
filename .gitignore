@@ -21,3 +21,10 @@ playwright-report/
 
 supabase/.temp/
 supabase/.branches/
+
+# Extratos reais para conferencia local. O ferramental e versionado; os arquivos
+# de extrato nunca — contem CNPJ, nome e valor de clientes reais, alem do numero
+# da conta.
+tests/local/*
+!tests/local/README.md
+!tests/local/*.test.ts

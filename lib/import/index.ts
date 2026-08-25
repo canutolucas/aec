@@ -8,6 +8,8 @@ import type { CanonicalStatement } from "./types";
 export * from "./types";
 export * from "./dedup";
 export { parseOfx, parseOfxAmount, parseOfxDate, decodeOfx } from "./ofx";
+export { parseCoraLinhas, parseCoraPdf } from "./cora";
+export { extrairLinhas, type CelulaPdf, type LinhaPdf } from "./pdf";
 export {
   type CsvMapping,
   type DetectedMapping,

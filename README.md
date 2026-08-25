@@ -8,8 +8,8 @@ O que a planilha nao faz e esta aqui:
 
 - **Trava de mes fechado.** Depois de fechado, o mes nao aceita mais escrita. A
   reabertura exige motivo e fica registrada com autor e data.
-- **Conciliacao com o extrato.** Importa OFX ou CSV do banco e aponta, linha a
-  linha, o que falta lancar e o que foi lancado mas nao aconteceu.
+- **Conciliacao com o extrato.** Importa OFX, CSV ou o PDF do Cora e aponta,
+  linha a linha, o que falta lancar e o que foi lancado mas nao aconteceu.
 - **Trilha de auditoria.** Quem alterou, quando, e de quanto para quanto.
 - **Fluxo de caixa projetado.** A data exata em que o caixa fura, se furar.
 - **Isolamento entre empresas.** Aplicado no banco por RLS, nao por filtro no
@@ -21,7 +21,7 @@ O que a planilha nao faz e esta aqui:
 |---|---|---|
 | 0 | Fundacao, schema, RLS, autenticacao | pronto |
 | 1 | Contas bancarias, lancamentos, saldo, transferencia | pronto |
-| 2 | Conciliacao bancaria | dominio e leitores prontos; telas pendentes |
+| 2 | Conciliacao bancaria | dominio e leitores (OFX, CSV, PDF) prontos; telas pendentes |
 | 3 | Fluxo de caixa projetado | dominio pronto; usado no painel |
 | 4 | Relatorios, dashboard, fechamento pela tela | pendente |
 | 5 | Migracao da planilha e carteira multiempresa | modelo pronto; telas pendentes |
@@ -77,12 +77,74 @@ Antes de desligar o Excel:
 4. Rode uma semana em paralelo, planilha e sistema, antes de abandonar a
    planilha.
 
+## Formatos de extrato aceitos
+
+| Formato | Identificador da transacao | Nome da contraparte | Recomendacao |
+|---|---|---|---|
+| **OFX** | FITID do banco | completo | **prefira este** |
+| CSV | nenhum | completo | bom, com o mapeamento de colunas configurado |
+| PDF (Cora) | nenhum | **truncado** | ultimo recurso |
+
+Peca OFX ao banco sempre que ele oferecer. O FITID e um identificador que o
+proprio banco atribui a cada transacao, o que torna a deduplicacao exata: sem
+ele, reimportar um periodo que se sobrepoe depende de comparar data, valor e
+historico, e dois pagamentos identicos no mesmo dia ficam indistinguiveis.
+
+### Sobre o PDF
+
+O leitor de PDF existe porque e o que costuma estar a mao, mas ele carrega
+limitacoes que convem conhecer antes de depender dele:
+
+- **O nome da contraparte vem cortado.** Num extrato real de agosto de 2026, 27
+  de 43 nomes chegaram truncados ("Le Va Tout Do Brasil L…"). Regra de
+  categorizacao por nome fica pela metade.
+- **Nao ha identificador de transacao.** A deduplicacao usa data, valor e
+  historico.
+- **O layout e diagramacao, nao contrato.** Quando o banco mudar o desenho da
+  pagina, o leitor para de funcionar.
+
+Duas coisas compensam, e sao o motivo de o leitor ser confiavel apesar do
+formato:
+
+**O CNPJ/CPF vem inteiro, mesmo quando o nome vem cortado.** Ele e uma chave
+melhor do que o nome jamais seria: nao muda, nao abrevia e nao depende de como o
+banco escreveu. Monte as regras de categorizacao pelo documento.
+
+**O extrato declara os totais e o saldo de cada dia, e o leitor refaz essas
+contas.** Isso ataca o pior modo de falha de um leitor de PDF, que nao e quebrar
+— e ler errado e seguir em frente. Uma linha perdida produziria um saldo
+plausivel, e a diferenca so apareceria no fechamento, quando ninguem mais liga
+uma coisa a outra. Aqui a conferencia aponta *em que dia* a leitura divergiu, na
+hora da importacao.
+
+O leitor tambem detecta extrato parcial: um PDF gerado no dia 25 declara cobrir o
+mes inteiro, mas so atesta ate o dia 25. Importar 31/08 como fim do periodo faria
+o sistema tratar agosto como coberto, e os dias 26 a 31 nunca seriam cobrados de
+ninguem.
+
+### Extratos reais nos testes
+
+Extrato de verdade contem CNPJ, nome e valor de clientes e fornecedores reais,
+alem do numero da conta — a carteira da assessoria. **Isso nao entra em
+repositorio**, nem privado.
+
+As fixtures versionadas sao anonimizadas: preservam a geometria exata do PDF
+(coordenadas, recuos, colunas, nomes truncados, ordem invertida, paginacao) com
+nomes, documentos e valores fabricados. O gerador em `tests/local/` deriva a
+lista do que precisa ser trocado do proprio arquivo, em vez de te-la escrita a
+mao — escrever a mao exigiria colar dados reais em um arquivo versionado, que
+seria exatamente o vazamento a evitar.
+
+Para conferir um leitor contra um extrato de verdade, coloque o arquivo em
+`tests/local/` (pasta ignorada pelo git) e rode `npx vitest run tests/local`.
+Sem arquivo, esses testes se declaram pulados.
+
 ## Como o codigo esta organizado
 
 ```
 app/                    telas (Next.js App Router)
 lib/domain/             REGRAS PURAS, sem I/O — toda conta de dinheiro
-lib/import/             leitores de OFX e CSV -> formato canonico unico
+lib/import/             leitores de OFX, CSV e PDF -> formato canonico unico
 lib/db/                 acesso ao Supabase e Server Actions
 supabase/migrations/    schema versionado
 tests/sql/              testes de schema, RLS e seeds
