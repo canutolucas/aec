@@ -129,8 +129,8 @@ describe("periodo que o extrato de fato atesta", () => {
   });
 
   it("avisa que o mes esta incompleto", () => {
-    expect(extrato.warnings.join(" ")).toMatch(/diz cobrir ate 31\/08\/2026/);
-    expect(extrato.warnings.join(" ")).toMatch(/peca o extrato do restante/);
+    expect(extrato.warnings.join(" ")).toMatch(/diz cobrir at[eé] 31\/08\/2026/);
+    expect(extrato.warnings.join(" ")).toMatch(/pe[cç]a o extrato do restante/);
   });
 });
 
@@ -170,7 +170,7 @@ describe("leitura errada e detectada, nao silenciada", () => {
     expect(quebrado.lines).toHaveLength(42);
     expect(quebrado.integrity!.ok).toBe(false);
     expect(quebrado.integrity!.problems.length).toBeGreaterThan(0);
-    expect(quebrado.warnings.join(" ")).toMatch(/nao confere/);
+    expect(quebrado.warnings.join(" ")).toMatch(/n[aã]o confere/);
   });
 
   it("diz em que dia a leitura divergiu", () => {
@@ -193,7 +193,7 @@ describe("leitura errada e detectada, nao silenciada", () => {
     const resultado = parseCoraLinhas(adulterado);
     expect(resultado.integrity!.ok).toBe(false);
     // Um centavo basta para a conferencia acusar.
-    expect(resultado.integrity!.problems.join(" ")).toMatch(/Total de entradas nao confere/);
+    expect(resultado.integrity!.problems.join(" ")).toMatch(/Total de entradas n[aã]o confere/);
   });
 });
 

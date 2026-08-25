@@ -283,8 +283,8 @@ describe("periodo que o OFX de fato atesta", () => {
   });
 
   it("avisa que o periodo declarado nao foi coberto", () => {
-    expect(extrato.warnings.join(" ")).toMatch(/diz cobrir ate 31\/08\/2026/);
-    expect(extrato.warnings.join(" ")).toMatch(/peca o extrato do restante/);
+    expect(extrato.warnings.join(" ")).toMatch(/diz cobrir at[eé] 31\/08\/2026/);
+    expect(extrato.warnings.join(" ")).toMatch(/pe[cç]a o extrato do restante/);
   });
 
   it("corta pela data de geracao, e nao pelo ultimo lancamento", () => {
@@ -304,7 +304,7 @@ describe("periodo que o OFX de fato atesta", () => {
     const extrato = parseOfx(completo);
 
     expect(extrato.periodEnd).toBe("2026-08-31");
-    expect(extrato.warnings.join(" ")).not.toMatch(/diz cobrir ate/);
+    expect(extrato.warnings.join(" ")).not.toMatch(/diz cobrir at[eé]/);
   });
 });
 

@@ -148,12 +148,12 @@ export function parseOfxDate(value: string): IsoDate {
   const digits = value.trim().replace(/^\[|\]$/g, "");
   const match = /^(\d{4})(\d{2})(\d{2})/.exec(digits);
   if (!match) {
-    throw new ImportError(`Data OFX invalida: "${value}"`);
+    throw new ImportError(`Data OFX inválida: "${value}"`);
   }
 
   const iso = `${match[1]}-${match[2]}-${match[3]}`;
   if (!isIsoDate(iso)) {
-    throw new ImportError(`Data OFX inexistente no calendario: "${value}"`);
+    throw new ImportError(`Data OFX inexistente no calendário: "${value}"`);
   }
   return iso;
 }
@@ -186,7 +186,7 @@ export function parseOfxAmount(value: string): Cents {
   }
 
   if (!/^[+-]?\d*\.?\d*$/.test(normalized) || /^[+-]?\.?$/.test(normalized)) {
-    throw new ImportError(`Valor OFX invalido: "${value}"`);
+    throw new ImportError(`Valor OFX inválido: "${value}"`);
   }
 
   return fromDb(normalized.replace(/^\+/, ""));
@@ -211,7 +211,7 @@ export function parseOfx(input: string | Uint8Array): CanonicalStatement {
 
   if (!/<OFX>/i.test(content)) {
     throw new ImportError(
-      "Arquivo nao parece ser um OFX: nao contem a secao <OFX>. Confira se o download do banco foi concluido.",
+      "Arquivo não parece ser um OFX: não contém a seção <OFX>. Confira se o download do banco foi concluído.",
     );
   }
 
@@ -227,7 +227,7 @@ export function parseOfx(input: string | Uint8Array): CanonicalStatement {
     const amount = childValue(node, "TRNAMT");
 
     if (posted === undefined || amount === undefined) {
-      warnings.push(`Transacao ${index + 1} ignorada: falta data ou valor.`);
+      warnings.push(`Transação ${index + 1} ignorada: falta data ou valor.`);
       return [];
     }
 
@@ -252,7 +252,7 @@ export function parseOfx(input: string | Uint8Array): CanonicalStatement {
       }];
     } catch (error) {
       warnings.push(
-        `Transacao ${index + 1} ignorada: ${error instanceof Error ? error.message : String(error)}`,
+        `Transação ${index + 1} ignorada: ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];
     }
@@ -263,7 +263,7 @@ export function parseOfx(input: string | Uint8Array): CanonicalStatement {
   const withoutFitid = lines.filter((line) => line.fitid === undefined || line.fitid === "").length;
   if (withoutFitid > 0) {
     warnings.push(
-      `${withoutFitid} de ${lines.length} transacoes vieram sem FITID. A deduplicacao dessas usa data, valor e memo.`,
+      `${withoutFitid} de ${lines.length} transações vieram sem FITID. A deduplicação dessas usa data, valor e memo.`,
     );
   }
 
@@ -293,9 +293,9 @@ export function parseOfx(input: string | Uint8Array): CanonicalStatement {
 
   if (declaredEnd !== undefined && periodEnd !== undefined && periodEnd < declaredEnd) {
     warnings.push(
-      `O arquivo diz cobrir ate ${formatarData(declaredEnd)}, mas foi gerado em ` +
-        `${formatarData(periodEnd)} e nao pode conter o que veio depois. O periodo importado vai ` +
-        "ate a data de geracao; peca o extrato do restante antes de fechar o mes.",
+      `O arquivo diz cobrir até ${formatarData(declaredEnd)}, mas foi gerado em ` +
+        `${formatarData(periodEnd)} e não pode conter o que veio depois. O período importado vai ` +
+        "até a data de geração; peça o extrato do restante antes de fechar o mês.",
     );
   }
 
@@ -305,8 +305,8 @@ export function parseOfx(input: string | Uint8Array): CanonicalStatement {
   const comDocumento = lines.filter((line) => line.counterpartyDocument !== undefined).length;
   if (comDocumento > 0) {
     warnings.push(
-      `${comDocumento} de ${lines.length} transacoes trazem CNPJ ou CPF no historico. ` +
-        "Regras de categorizacao por documento sao mais confiaveis que por nome.",
+      `${comDocumento} de ${lines.length} transações trazem CNPJ ou CPF no histórico. ` +
+        "Regras de categorização por documento são mais confiáveis que por nome.",
     );
   }
 

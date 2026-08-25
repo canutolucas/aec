@@ -70,7 +70,7 @@ export function parseCoraLinhas(linhas: readonly LinhaPdf[]): CanonicalStatement
 
   if (!/Cora SCFI/i.test(tudo)) {
     throw new ImportError(
-      "Este PDF nao parece ser um extrato do Cora. Se for de outro banco, exporte em OFX — " +
+      "Este PDF não parece ser um extrato do Cora. Se for de outro banco, exporte em OFX — " +
         "o leitor de OFX funciona para qualquer banco.",
     );
   }
@@ -118,7 +118,7 @@ export function parseCoraLinhas(linhas: readonly LinhaPdf[]): CanonicalStatement
     if (!valor) continue;
 
     if (diaCorrente === null) {
-      warnings.push(`Transacao ignorada por vir antes de qualquer data: "${linha.texto}"`);
+      warnings.push(`Transação ignorada por vir antes de qualquer data: "${linha.texto}"`);
       continue;
     }
 
@@ -150,7 +150,7 @@ export function parseCoraLinhas(linhas: readonly LinhaPdf[]): CanonicalStatement
 
   if (brutas.length === 0) {
     throw new ImportError(
-      "Nenhuma transacao encontrada no PDF. O layout do extrato pode ter mudado.",
+      "Nenhuma transação encontrada no PDF. O layout do extrato pode ter mudado.",
     );
   }
 
@@ -175,8 +175,8 @@ export function parseCoraLinhas(linhas: readonly LinhaPdf[]): CanonicalStatement
   if (truncados > 0) {
     warnings.push(
       `${truncados} de ${lines.length} contrapartes vieram com o nome cortado pelo extrato. ` +
-        "O CNPJ/CPF veio inteiro e e uma chave melhor: prefira criar as regras de categorizacao " +
-        "por documento. Se o Cora oferecer OFX para este periodo, o OFX traz o nome completo.",
+        "O CNPJ/CPF veio inteiro e é uma chave melhor: prefira criar as regras de categorização " +
+        "por documento. Se o Cora oferecer OFX para este período, o OFX traz o nome completo.",
     );
   }
 
@@ -196,10 +196,10 @@ export function parseCoraLinhas(linhas: readonly LinhaPdf[]): CanonicalStatement
 
   if (declaredEnd !== undefined && declaredEnd > periodEnd) {
     warnings.push(
-      `O extrato diz cobrir ate ${formatarData(declaredEnd)}, mas foi gerado em ` +
-        `${geradoEm ? geradoEm[1] : formatarData(periodEnd)} e so tem movimento ate ` +
-        `${formatarData(periodEnd)}. O periodo importado vai ate ai; peca o extrato do restante ` +
-        "do mes antes de fechar.",
+      `O extrato diz cobrir até ${formatarData(declaredEnd)}, mas foi gerado em ` +
+        `${geradoEm ? geradoEm[1] : formatarData(periodEnd)} e só tem movimento até ` +
+        `${formatarData(periodEnd)}. O período importado vai até aí; peça o extrato do restante ` +
+        "do mês antes de fechar.",
     );
   }
 
@@ -237,14 +237,14 @@ function conferir(entrada: {
 
   if (entrada.declaredInflow !== undefined && entrada.declaredInflow !== computedInflow) {
     problems.push(
-      `Total de entradas nao confere: o extrato declara ${reais(entrada.declaredInflow)} e as ` +
+      `Total de entradas não confere: o extrato declara ${reais(entrada.declaredInflow)} e as ` +
         `linhas lidas somam ${reais(computedInflow)}.`,
     );
   }
 
   if (entrada.declaredOutflow !== undefined && entrada.declaredOutflow !== computedOutflow) {
     problems.push(
-      `Total de saidas nao confere: o extrato declara ${reais(entrada.declaredOutflow)} e as ` +
+      `Total de saídas não confere: o extrato declara ${reais(entrada.declaredOutflow)} e as ` +
         `linhas lidas somam ${reais(computedOutflow)}.`,
     );
   }
@@ -271,8 +271,8 @@ function conferir(entrada: {
 
       if (!ok) {
         problems.push(
-          `Saldo de ${dia} nao confere: o extrato declara ${reais(declared)} e o acumulado das ` +
-            `linhas lidas da ${reais(acumulado)}.`,
+          `Saldo de ${dia} não confere: o extrato declara ${reais(declared)} e o acumulado das ` +
+            `linhas lidas dá ${reais(acumulado)}.`,
         );
       }
     }
@@ -286,8 +286,8 @@ function conferir(entrada: {
     declaredClosing !== computedClosing
   ) {
     problems.push(
-      `Saldo final nao confere: o extrato declara ${reais(declaredClosing)} e o acumulado das ` +
-        `linhas lidas da ${reais(computedClosing)}.`,
+      `Saldo final não confere: o extrato declara ${reais(declaredClosing)} e o acumulado das ` +
+        `linhas lidas dá ${reais(computedClosing)}.`,
     );
   }
 
