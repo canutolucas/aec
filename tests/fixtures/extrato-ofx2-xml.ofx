@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?OFX OFXHEADER="200" VERSION="211" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>
+<OFX>
+  <BANKMSGSRSV1>
+    <STMTTRNRS>
+      <STMTRS>
+        <CURDEF>BRL</CURDEF>
+        <BANKACCTFROM>
+          <BANKID>237</BANKID>
+          <ACCTID>0001234567</ACCTID>
+          <ACCTTYPE>CHECKING</ACCTTYPE>
+        </BANKACCTFROM>
+        <BANKTRANLIST>
+          <DTSTART>20250401</DTSTART>
+          <DTEND>20250430</DTEND>
+          <STMTTRN>
+            <TRNTYPE>CREDIT</TRNTYPE>
+            <DTPOSTED>20250402</DTPOSTED>
+            <TRNAMT>1500.50</TRNAMT>
+            <FITID>ABC-001</FITID>
+            <MEMO>PIX RECEBIDO JOAO &amp; MARIA ME</MEMO>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20250415</DTPOSTED>
+            <TRNAMT>-320.75</TRNAMT>
+            <FITID>ABC-002</FITID>
+            <CHECKNUM>000123</CHECKNUM>
+            <MEMO>COMPENSACAO CHEQUE</MEMO>
+          </STMTTRN>
+        </BANKTRANLIST>
+        <LEDGERBAL>
+          <BALAMT>1179.75</BALAMT>
+          <DTASOF>20250430</DTASOF>
+        </LEDGERBAL>
+      </STMTRS>
+    </STMTTRNRS>
+  </BANKMSGSRSV1>
+</OFX>

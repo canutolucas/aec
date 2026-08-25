@@ -226,3 +226,25 @@ describe("proposta de regra a partir do memo", () => {
     expect(resultado.categoryId).toBe("cat-aluguel");
   });
 });
+
+describe("nome de mes na proposta de regra", () => {
+  it("e descartado, porque muda todo mes", () => {
+    // Uma regra "aluguel marco" para de casar em abril, e quem opera conclui que
+    // o sistema desaprendeu.
+    expect(suggestRuleText("PAGAMENTO ALUGUEL MARCO")).toBe("aluguel");
+    expect(suggestRuleText("HONORARIOS REFERENTE A JANEIRO")).toBe("honorarios");
+  });
+
+  it("a regra proposta continua casando no mes seguinte", () => {
+    const memoDeMarco = "PAGAMENTO BOLETO IMOBILIARIA CENTRAL ALUGUEL MARCO";
+    const memoDeAbril = "PAGAMENTO BOLETO IMOBILIARIA CENTRAL ALUGUEL ABRIL";
+
+    const texto = suggestRuleText(memoDeMarco);
+    const regras = [regra({ id: "gerada", matchText: texto, categoryId: "cat-aluguel" })];
+
+    expect(
+      categorize({ memo: memoDeAbril, amount: fromDb("-1800.00"), bankAccountId: CONTA }, regras)
+        .categoryId,
+    ).toBe("cat-aluguel");
+  });
+});

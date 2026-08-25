@@ -131,6 +131,11 @@ export function suggestRuleText(memo: string): string {
     "deb", "conta", "cc", "cp", "ag", "agencia", "banco", "boleto", "titulo",
     "cobranca", "tarifa", "liquidacao", "compensacao", "de", "da", "do", "para",
     "em", "ref", "referente", "nr", "num", "numero", "id", "aut", "autenticacao",
+    // Nome de mes muda todo mes. Uma regra que contenha "marco" para de casar em
+    // abril, e quem opera acha que o sistema desaprendeu.
+    "janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto",
+    "setembro", "outubro", "novembro", "dezembro", "jan", "fev", "mar", "abr",
+    "mai", "jun", "jul", "ago", "set", "out", "nov", "dez",
   ]);
 
   const tokens = normalizeText(memo)
