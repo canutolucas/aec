@@ -17,24 +17,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm turbo run type-check
 
       - name: Lint
-        run: npm run lint
+        run: pnpm turbo run lint
 
       - name: Testes de dominio e importacao
-        run: npm run test
+        run: pnpm turbo run test
 
       - name: Build de producao
-        run: npm run build
+        run: pnpm turbo run build
 
   banco:
     name: Schema, RLS e seeds

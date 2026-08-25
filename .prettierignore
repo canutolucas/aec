@@ -1,0 +1,8 @@
+.next
+node_modules
+dist
+.turbo
+coverage
+pnpm-lock.yaml
+supabase/.temp
+*.tsbuildinfo

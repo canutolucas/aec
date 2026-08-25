@@ -1,0 +1,22 @@
+{
+  "name": "@aec/db",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Hand-written types mirroring the Supabase/Postgres schema — shared between web and mobile",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aec/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}

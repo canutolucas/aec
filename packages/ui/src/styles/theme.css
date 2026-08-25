@@ -1,0 +1,147 @@
+/**
+ * Brand theme tokens, in the shadcn/TweakCN convention: HSL triples on
+ * `:root`/`.dark`, mapped into Tailwind v4 utilities via `@theme inline`.
+ *
+ * Palette: warm paper white, authority blue, accountant's-ledger gold —
+ * not shadcn's default gray, not a generic SaaS purple.
+ *
+ *   background / white   #f1f0ec  hsl(48 15% 93.5%)
+ *   primary / blue        #01416d  hsl(204 98% 21.6%)
+ *   accent / gold         #c99156  hsl(31 52% 56.3%)
+ *
+ * Neutrals are tilted warm (hue 45-48), derived from the background itself —
+ * a pure gray next to this background would read as a mistake, not a choice.
+ */
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  /*
+   * Financial semantics. shadcn has no inflow/outflow, and reusing
+   * `--destructive` for outflow would be wrong: a normal expense is not an
+   * error. These get their own tokens instead.
+   */
+  --color-inflow: hsl(var(--inflow));
+  --color-outflow: hsl(var(--outflow));
+  --color-warning: hsl(var(--warning));
+
+  /* Chart ramp: the brand itself turned into a scale, navy through gold. */
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /*
+   * Archivo for headings and labels (institutional grotesk); IBM Plex Mono
+   * for every monetary value, CNPJ and document number. Accounting is
+   * columnar work — fixed-width digits line the decimal comma up on their
+   * own, without anyone having to read digit by digit.
+   */
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+}
+
+:root {
+  --background: 48 15% 93.5%;
+  --foreground: 204 40% 12%;
+  --card: 48 20% 97%;
+  --card-foreground: 204 40% 12%;
+  --popover: 48 20% 97%;
+  --popover-foreground: 204 40% 12%;
+  --primary: 204 98% 21.6%;
+  --primary-foreground: 48 15% 93.5%;
+  --secondary: 45 12% 88%;
+  --secondary-foreground: 204 40% 12%;
+  --muted: 45 12% 90%;
+  --muted-foreground: 204 12% 40%;
+  --accent: 31 52% 56.3%;
+  --accent-foreground: 204 40% 12%;
+  --destructive: 4 62% 46%;
+  --destructive-foreground: 48 15% 93.5%;
+  --border: 45 10% 84%;
+  --input: 45 10% 84%;
+  --ring: 204 98% 21.6%;
+
+  --inflow: 158 55% 30%;
+  --outflow: 4 62% 46%;
+  --warning: 38 78% 42%;
+
+  --chart-1: 204 98% 22%;
+  --chart-2: 199 55% 38%;
+  --chart-3: 190 35% 50%;
+  --chart-4: 31 52% 56%;
+  --chart-5: 20 45% 44%;
+
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 204 35% 8%;
+  --foreground: 48 15% 93.5%;
+  --card: 204 30% 11%;
+  --card-foreground: 48 15% 93.5%;
+  --popover: 204 30% 11%;
+  --popover-foreground: 48 15% 93.5%;
+  --primary: 204 70% 62%;
+  --primary-foreground: 204 35% 8%;
+  --secondary: 204 20% 16%;
+  --secondary-foreground: 48 15% 93.5%;
+  --muted: 204 20% 16%;
+  --muted-foreground: 204 12% 62%;
+  --accent: 31 60% 62%;
+  --accent-foreground: 204 35% 8%;
+  --destructive: 6 70% 64%;
+  --destructive-foreground: 204 35% 8%;
+  --border: 204 20% 18%;
+  --input: 204 20% 18%;
+  --ring: 204 70% 62%;
+
+  --inflow: 158 50% 52%;
+  --outflow: 6 70% 64%;
+  --warning: 38 75% 58%;
+
+  --chart-1: 204 80% 60%;
+  --chart-2: 199 55% 55%;
+  --chart-3: 190 35% 60%;
+  --chart-4: 31 60% 62%;
+  --chart-5: 20 50% 55%;
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Tabular figures for every monetary value: digits share one width, so the
+ * decimal comma lines up column-down without anyone reading digit by digit.
+ */
+.tabular-money {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}

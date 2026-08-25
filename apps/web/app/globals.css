@@ -1,0 +1,21 @@
+@import "tailwindcss";
+@import "@aec/ui/theme.css";
+
+/* @aec/ui ships raw source, not a build — Tailwind needs to be told to scan
+   it directly, since the pnpm symlink puts it under node_modules. */
+@source "../../../packages/ui/src";
+
+/*
+ * Working system, not a showcase: high density, strong contrast, legible
+ * numbers. Whoever uses this spends the day checking values against a
+ * statement.
+ */
+
+html {
+  color-scheme: light;
+}
+
+:root.dark,
+.dark {
+  color-scheme: dark;
+}

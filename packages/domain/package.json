@@ -1,0 +1,22 @@
+{
+  "name": "@aec/domain",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Pure money, date, balance, projection, matching and rule-matching functions — the arithmetic every other package relies on",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.11"
+  }
+}

@@ -17,39 +17,40 @@ O que a planilha nao faz e esta aqui:
 
 ## Estado atual
 
-| Fase | Escopo | Situacao |
-|---|---|---|
-| 0 | Fundacao, schema, RLS, autenticacao | pronto |
-| 1 | Contas bancarias, lancamentos, saldo, transferencia | pronto |
-| 2 | Conciliacao bancaria | dominio e leitores (OFX, CSV, PDF) prontos; telas pendentes |
-| 3 | Fluxo de caixa projetado | dominio pronto; usado no painel |
-| 4 | Relatorios, dashboard, fechamento pela tela | pendente |
-| 5 | Migracao da planilha e carteira multiempresa | modelo pronto; telas pendentes |
+| Fase | Escopo                                              | Situacao                                                    |
+| ---- | --------------------------------------------------- | ----------------------------------------------------------- |
+| 0    | Fundacao, schema, RLS, autenticacao                 | pronto                                                      |
+| 1    | Contas bancarias, lancamentos, saldo, transferencia | pronto                                                      |
+| 2    | Conciliacao bancaria                                | dominio e leitores (OFX, CSV, PDF) prontos; telas pendentes |
+| 3    | Fluxo de caixa projetado                            | dominio pronto; usado no painel                             |
+| 4    | Relatorios, dashboard, fechamento pela tela         | pendente                                                    |
+| 5    | Migracao da planilha e carteira multiempresa        | modelo pronto; telas pendentes                              |
 
 O schema ja e multiempresa desde o primeiro dia. Habilitar a carteira e
 configuracao, nao refatoracao.
 
 ## Como rodar
 
-Precisa de Node 22 e do [Supabase CLI](https://supabase.com/docs/guides/cli).
+Precisa de Node 22, [pnpm](https://pnpm.io) 10 e do
+[Supabase CLI](https://supabase.com/docs/guides/cli).
 
 ```bash
-npm install
-supabase start          # sobe Postgres, Auth e Storage locais
-cp .env.example .env.local
+pnpm install
+supabase start                     # sobe Postgres, Auth e Storage locais
+cp apps/web/.env.example apps/web/.env.local
 # preencha NEXT_PUBLIC_SUPABASE_ANON_KEY com a chave que o `supabase start` imprimiu
-npm run db:reset        # aplica as migrations e os dados de exemplo
-npm run dev
+pnpm db:reset                      # aplica as migrations e os dados de exemplo
+pnpm dev                           # roda todos os apps via Turborepo
 ```
 
 Abra http://localhost:3000 e entre com um dos usuarios de exemplo (senha
 `senha-de-teste-123`):
 
-| E-mail | Papel | Para que serve |
-|---|---|---|
-| `responsavel@assessoria.teste` | Responsavel | acesso total, duas empresas |
-| `assistente@assessoria.teste` | Assistente | lanca e concilia, nao fecha o mes |
-| `cliente@empresa-a.teste` | Cliente | somente leitura, uma empresa |
+| E-mail                         | Papel       | Para que serve                    |
+| ------------------------------ | ----------- | --------------------------------- |
+| `responsavel@assessoria.teste` | Responsavel | acesso total, duas empresas       |
+| `assistente@assessoria.teste`  | Assistente  | lanca e concilia, nao fecha o mes |
+| `cliente@empresa-a.teste`      | Cliente     | somente leitura, uma empresa      |
 
 Entrar com dois deles em janelas separadas e a forma mais rapida de ver o
 isolamento entre empresas e as permissoes por papel funcionando.
@@ -57,11 +58,11 @@ isolamento entre empresas e as permissoes por papel funcionando.
 ## Verificacao
 
 ```bash
-npm run check      # typecheck, lint e testes de dominio e importacao
-npm run test:sql   # schema, RLS, trava de mes e seeds, em Postgres puro
+pnpm check       # typecheck, lint e testes de todos os pacotes e apps (via Turborepo)
+pnpm test:sql    # schema, RLS, trava de mes e seeds, em Postgres puro
 ```
 
-`npm run test:sql` **nao precisa de Docker nem do Supabase CLI**: sobe um
+`pnpm test:sql` **nao precisa de Docker nem do Supabase CLI**: sobe um
 Postgres descartavel e aplica um stub do que o Supabase fornece pronto (schema
 `auth`, `auth.uid()` e os papeis do PostgREST). Ele atua como usuarios reais, com
 `set role authenticated` e o claim `sub` — testar RLS como superusuario nao
@@ -79,11 +80,11 @@ Antes de desligar o Excel:
 
 ## Formatos de extrato aceitos
 
-| Formato | Identificador da transacao | Nome da contraparte | CNPJ/CPF | Recomendacao |
-|---|---|---|---|---|
-| **OFX** | FITID do banco | completo | sim | **prefira este** |
-| CSV | nenhum | completo | depende do banco | bom, com o mapeamento configurado |
-| PDF (Cora) | nenhum | **truncado** | sim | ultimo recurso |
+| Formato    | Identificador da transacao | Nome da contraparte | CNPJ/CPF         | Recomendacao                      |
+| ---------- | -------------------------- | ------------------- | ---------------- | --------------------------------- |
+| **OFX**    | FITID do banco             | completo            | sim              | **prefira este**                  |
+| CSV        | nenhum                     | completo            | depende do banco | bom, com o mapeamento configurado |
+| PDF (Cora) | nenhum                     | **truncado**        | sim              | ultimo recurso                    |
 
 Peca OFX ao banco sempre que ele oferecer. O FITID e um identificador que o
 proprio banco atribui a cada transacao, o que torna a deduplicacao exata: sem
@@ -124,7 +125,7 @@ quando o banco o escreve la.
 contas.** Isso ataca o pior modo de falha de um leitor de PDF, que nao e quebrar
 — e ler errado e seguir em frente. Uma linha perdida produziria um saldo
 plausivel, e a diferenca so apareceria no fechamento, quando ninguem mais liga
-uma coisa a outra. Aqui a conferencia aponta *em que dia* a leitura divergiu, na
+uma coisa a outra. Aqui a conferencia aponta _em que dia_ a leitura divergiu, na
 hora da importacao.
 
 ### Extrato parcial
@@ -146,7 +147,7 @@ O PDF traz o saldo de cada dia, entao o leitor prova sozinho que nao perdeu
 nenhuma linha, e diz em que dia divergiu.
 
 O OFX traz o saldo final mas nao o inicial, entao o arquivo **nao se prova
-sozinho** — ele afirma um total. O leitor registra o saldo inicial *implicado*
+sozinho** — ele afirma um total. O leitor registra o saldo inicial _implicado_
 (final menos o movimento) para a aplicacao confrontar com o saldo que ela ja tem
 para a conta na vespera. E a mesma conferencia, fechada do lado de fora.
 
@@ -164,25 +165,40 @@ mao — escrever a mao exigiria colar dados reais em um arquivo versionado, que
 seria exatamente o vazamento a evitar.
 
 Para conferir um leitor contra um extrato de verdade, coloque o arquivo em
-`tests/local/` (pasta ignorada pelo git) e rode `npx vitest run tests/local`.
-Sem arquivo, esses testes se declaram pulados.
+`packages/statements/tests/local/` (pasta ignorada pelo git) e rode
+`pnpm --filter @aec/statements test`. Sem arquivo, esses testes se declaram
+pulados.
 
 ## Como o codigo esta organizado
 
+Monorepo pnpm + Turborepo: `apps/*` sao as superficies (hoje so o web; mobile
+em construcao), `packages/*` e o que elas compartilham. Nao ha `apps/backend`
+— o Supabase (PostgREST + RLS + Auth) e o backend.
+
 ```
-app/                    telas (Next.js App Router)
-lib/domain/             REGRAS PURAS, sem I/O — toda conta de dinheiro
-lib/import/             leitores de OFX, CSV e PDF -> formato canonico unico
-lib/db/                 acesso ao Supabase e Server Actions
-supabase/migrations/    schema versionado
-tests/sql/              testes de schema, RLS e seeds
+apps/
+  web/                       Next.js — telas, Tailwind, shadcn/ui, TanStack
+packages/
+  domain/                    REGRAS PURAS, sem I/O — toda conta de dinheiro
+  statements/
+    src/universal/           OFX, CSV, dedup — roda em web e mobile
+    src/node/                PDF, leitor Cora — so roda em Node (unpdf)
+  db/                        tipos do schema Supabase, compartilhados
+  ui/                        tema de marca (TweakCN) e componentes shadcn
+  utils/                     constantes compartilhadas
+supabase/migrations/         schema versionado
+tests/sql/                   testes de schema, RLS e seeds
 ```
+
+Cada pacote roda os proprios `type-check`/`lint`/`test` via `pnpm turbo run
+<tarefa>`; os pacotes exportam o TypeScript fonte diretamente (sem build
+step), resolvido via symlinks do pnpm.
 
 ### Tres regras que valem para o repositorio inteiro
 
-**1. Conta de dinheiro so mora em `lib/domain/`.** Sao funcoes puras, sem I/O e
-sem relogio, e sao as unicas que somam valores. Repetir a mesma soma em SQL e em
-TypeScript garante que as duas versoes divirjam com o tempo.
+**1. Conta de dinheiro so mora em `packages/domain/`.** Sao funcoes puras, sem
+I/O e sem relogio, e sao as unicas que somam valores. Repetir a mesma soma em
+SQL e em TypeScript garante que as duas versoes divirjam com o tempo.
 
 **2. Dinheiro e inteiro de centavos; datas de caixa sao `date`.** Ponto flutuante
 nunca toca valor monetario — `0.1 + 0.2` nao da `0.3`, e um relatorio que fecha
@@ -201,7 +217,7 @@ O isolamento entre empresas e a trava de mes fechado sao **policies de RLS**, no
 banco. Uma consulta que esqueca o `where company_id = ...` devolve zero linhas em
 vez de vazar dados de outro cliente.
 
-A aplicacao nunca usa a *service role* do Supabase: toda consulta e feita
+A aplicacao nunca usa a _service role_ do Supabase: toda consulta e feita
 autenticada como a pessoa que esta usando o sistema. Um cliente com service role
 atravessaria o RLS e tornaria todas as policies decorativas.
 

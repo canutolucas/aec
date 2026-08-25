@@ -3,10 +3,10 @@
 Hoje **nao existe URL publicada**: o repositorio tem o codigo, nao um ambiente. Ha
 dois caminhos, e eles servem a proposito diferente.
 
-| Caminho | Onde roda | Quem acessa | Quando usar |
-|---|---|---|---|
-| **A. Local** | na maquina dela | so ela, naquele computador | testar antes de decidir |
-| **B. Nuvem** | Vercel + Supabase | qualquer navegador, celular incluso | uso de verdade |
+| Caminho      | Onde roda         | Quem acessa                         | Quando usar             |
+| ------------ | ----------------- | ----------------------------------- | ----------------------- |
+| **A. Local** | na maquina dela   | so ela, naquele computador          | testar antes de decidir |
+| **B. Nuvem** | Vercel + Supabase | qualquer navegador, celular incluso | uso de verdade          |
 
 Comece pelo A se a ideia e conferir se a ferramenta serve. Va direto para o B se
 ela ja vai usar no dia a dia — o A nao tem backup nem acesso remoto.
@@ -15,23 +15,23 @@ ela ja vai usar no dia a dia — o A nao tem backup nem acesso remoto.
 
 ## A. Rodar na maquina dela
 
-Precisa de tres coisas instaladas: [Node 22+](https://nodejs.org),
-[Docker Desktop](https://www.docker.com/products/docker-desktop/) e o
-[Supabase CLI](https://supabase.com/docs/guides/cli). O Docker e exigencia do
-Supabase local, que sobe Postgres, autenticacao e storage em containers.
+Precisa de quatro coisas instaladas: [Node 22+](https://nodejs.org),
+[pnpm](https://pnpm.io) 10, [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+e o [Supabase CLI](https://supabase.com/docs/guides/cli). O Docker e exigencia
+do Supabase local, que sobe Postgres, autenticacao e storage em containers.
 
 ```bash
 git clone https://github.com/canutolucas/aec.git
 cd aec
 git checkout claude/accounting-bank-control-platform-b7drpl
-npm install
+pnpm install
 
-supabase start          # imprime as chaves locais no fim
-cp .env.example .env.local
+supabase start                     # imprime as chaves locais no fim
+cp apps/web/.env.example apps/web/.env.local
 # cole em NEXT_PUBLIC_SUPABASE_ANON_KEY a chave "anon key" que apareceu
 
-npm run db:reset        # aplica as migrations e os dados de exemplo
-npm run dev
+pnpm db:reset                      # aplica as migrations e os dados de exemplo
+pnpm dev                           # sobe o app web via Turborepo
 ```
 
 Abra <http://localhost:3000> e entre com `responsavel@assessoria.teste`, senha
@@ -76,7 +76,7 @@ util para desenvolver e inaceitavel em um sistema com dados de clientes.
 ### Passo 2 — usuario dela
 
 Em **Authentication > Users > Add user**, crie o usuario com o e-mail real e
-marque *Auto Confirm User*.
+marque _Auto Confirm User_.
 
 Em **Authentication > Providers > Email**, desligue **Enable signup**. Sem isso,
 qualquer pessoa que descobrisse a URL criaria uma conta sozinha. O
@@ -86,11 +86,15 @@ apenas para o ambiente local — o da nuvem se configura pelo painel.
 ### Passo 3 — aplicacao
 
 Na Vercel, **Add New > Project**, importe `canutolucas/aec` e escolha a branch
-`claude/accounting-bank-control-platform-b7drpl`. Em **Environment Variables**:
+`claude/accounting-bank-control-platform-b7drpl`. O repositorio e um monorepo
+pnpm/Turborepo: em **Root Directory**, aponte para `apps/web` (a Vercel
+detecta o Next.js automaticamente a partir dai; o `pnpm-workspace.yaml` na
+raiz garante que `pnpm install` traga tambem os pacotes de `packages/*`). Em
+**Environment Variables**:
 
-| Variavel | Valor |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | o `Project URL` do passo 1 |
+| Variavel                        | Valor                          |
+| ------------------------------- | ------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`      | o `Project URL` do passo 1     |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | a `anon public` key do passo 1 |
 
 A `service_role` key **nao entra aqui**. Ela atravessa o isolamento entre
