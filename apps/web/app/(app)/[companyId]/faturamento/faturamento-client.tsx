@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { importarNotas } from "@/lib/db/faturamento";
-import { formatDate, formatTaxId } from "@/lib/ui/format";
+import { formatDate, formatTaxId, friendlyError, isInvoiceOverdue } from "@/lib/ui/format";
 
 const STATUS_TONE: Record<InvoiceBalance["status"], "neutral" | "warn" | "success"> = {
   aberta: "neutral",
@@ -59,7 +59,10 @@ export function FaturamentoClient({
       const result = await importarNotas({ companyId, files: parsed });
 
       if (!result.ok) {
-        setFeedback({ text: result.error ?? "Nao foi possivel importar as notas.", tone: "error" });
+        setFeedback({
+          text: friendlyError(result.error, "Nao foi possivel importar as notas."),
+          tone: "error",
+        });
         return;
       }
 
@@ -67,9 +70,10 @@ export function FaturamentoClient({
       if (result.imported) parts.push(`${result.imported} nota(s) importada(s)`);
       if (result.duplicated) parts.push(`${result.duplicated} ja existiam (ignoradas)`);
       if (result.failed && result.failed.length > 0) {
-        parts.push(
-          `${result.failed.length} arquivo(s) com erro: ${result.failed.map((f) => `${f.fileName} (${f.error})`).join("; ")}`,
-        );
+        const details = result.failed
+          .map((f) => `${f.fileName} (${friendlyError(f.error, "erro desconhecido")})`)
+          .join("; ");
+        parts.push(`${result.failed.length} arquivo(s)/nota(s) com erro: ${details}`);
       }
 
       setFeedback({
@@ -83,6 +87,9 @@ export function FaturamentoClient({
   const totalFaturado = invoices.reduce((sum, inv) => sum + fromDb(inv.amount), 0);
   const totalRecebido = invoices.reduce((sum, inv) => sum + fromDb(inv.received_amount), 0);
   const totalEmAberto = invoices.reduce((sum, inv) => sum + fromDb(inv.outstanding_amount), 0);
+  const vencidas = invoices.filter((inv) =>
+    isInvoiceOverdue(inv.issued_on, fromDb(inv.outstanding_amount)),
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -106,7 +113,7 @@ export function FaturamentoClient({
 
       <Card>
         <CardHeader title="Resumo" />
-        <div className="grid gap-4 p-4 sm:grid-cols-3">
+        <div className="grid gap-4 p-4 sm:grid-cols-4">
           <div>
             <p className="text-2xl font-semibold tabular-nums">
               <Money cents={totalFaturado} />
@@ -124,6 +131,14 @@ export function FaturamentoClient({
               <Money cents={totalEmAberto} />
             </p>
             <p className="text-muted-foreground text-xs">Em aberto</p>
+          </div>
+          <div>
+            <p
+              className={`text-2xl font-semibold tabular-nums ${vencidas > 0 ? "text-destructive" : ""}`}
+            >
+              {vencidas}
+            </p>
+            <p className="text-muted-foreground text-xs">Vencidas (+45 dias)</p>
           </div>
         </div>
       </Card>
@@ -175,9 +190,15 @@ export function FaturamentoClient({
                       <Money cents={fromDb(invoice.outstanding_amount)} />
                     </td>
                     <td className="px-4 py-2">
-                      <Badge tone={STATUS_TONE[invoice.status]}>
-                        {INVOICE_STATUS_LABELS[invoice.status]}
-                      </Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge tone={STATUS_TONE[invoice.status]}>
+                          {INVOICE_STATUS_LABELS[invoice.status]}
+                        </Badge>
+                        {isInvoiceOverdue(
+                          invoice.issued_on,
+                          fromDb(invoice.outstanding_amount),
+                        ) && <Badge tone="error">Vencida</Badge>}
+                      </div>
                     </td>
                   </tr>
                 ))}

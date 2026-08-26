@@ -7,6 +7,7 @@ const TONES = {
   warn: "bg-warning/10 text-warning border-warning/30",
   success: "bg-inflow/10 text-inflow border-inflow/30",
   info: "bg-primary/10 text-primary border-primary/30",
+  error: "bg-destructive/10 text-destructive border-destructive/30",
 } as const;
 
 export function Badge({

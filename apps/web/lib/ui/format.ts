@@ -44,3 +44,35 @@ export function formatTaxId(digits: string | null): string {
   }
   return digits;
 }
+
+/**
+ * A NFS-e nao traz vencimento (so emissao) — o cliente paga "no mes
+ * seguinte", conforme a propria usuaria descreveu, sem uma data fixa
+ * declarada em lugar nenhum. 45 dias e uma folga alem do mes seguinte
+ * inteiro antes de chamar uma nota de "vencida", pra nao alarmar por uma
+ * nota que so esta esperando o prazo normal.
+ */
+export const OVERDUE_AFTER_DAYS = 45;
+
+/** Uma nota em aberto emitida ha mais de OVERDUE_AFTER_DAYS dias. */
+export function isInvoiceOverdue(issuedOn: IsoDate, outstandingCents: number): boolean {
+  if (outstandingCents <= 0) return false;
+  const issued = new Date(`${issuedOn}T00:00:00`);
+  const days = (Date.now() - issued.getTime()) / (1000 * 60 * 60 * 24);
+  return days > OVERDUE_AFTER_DAYS;
+}
+
+/**
+ * Garante que uma mensagem de erro sempre da pra ler e agir — em vez de um
+ * texto cru de driver/Postgres (json, stack trace, "fetch failed") virar a
+ * unica coisa que a pessoa ve na tela. A grande maioria dos erros deste app
+ * ja vem como frase em portugues (as proprias RPCs levantam a excecao com
+ * essa mensagem — ver comentario em cada uma); isto so cobre o resto.
+ */
+export function friendlyError(raw: string | undefined, fallback: string): string {
+  const trimmed = raw?.trim();
+  if (!trimmed) return fallback;
+  const looksReadable = /[a-zà-ú]/i.test(trimmed) && /[.!?]$/.test(trimmed) && trimmed.length < 300;
+  if (looksReadable) return trimmed;
+  return `${fallback} Se continuar, avise com esta mensagem: "${trimmed}".`;
+}
