@@ -209,6 +209,28 @@ begin
 end $$;
 
 \echo ''
+\echo '== Categoria de topo nao pode se repetir na mesma empresa =='
+-- categories' own table-level unique constraint is (company_id, parent_id,
+-- name) — useless for a top-level category, since parent_id is NULL on
+-- every one of those and Postgres treats every NULL as distinct from every
+-- other NULL. The partial unique index added in
+-- 20250101001200_categories_top_level_unique.sql is what actually closes
+-- this gap; this proves it holds without relying on any parent_id value.
+do $$
+begin
+  begin
+    -- 'Aluguel' already exists for this company (seeded above), at the top
+    -- level (parent_id null) — exactly the collision the constraint gap
+    -- used to miss.
+    insert into public.categories (company_id, name, kind)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Aluguel', 'ambos');
+    raise exception 'FALHOU: aceitou categoria de topo com nome repetido';
+  exception when unique_violation then
+    raise notice '  ok: categoria de topo com nome repetido e recusada';
+  end;
+end $$;
+
+\echo ''
 \echo '== Lancamento anterior ao saldo inicial =='
 do $$
 begin

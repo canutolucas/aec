@@ -11,6 +11,7 @@ const NAV = [
   { key: "lancamentos", label: "Lancamentos", href: (id: string) => routes.transactions(id) },
   { key: "contas", label: "Contas", href: routes.accounts },
   { key: "conciliacao", label: "Conciliacao", href: routes.reconciliation },
+  { key: "cadastros", label: "Cadastros", href: routes.registries },
 ] as const;
 
 export default async function CompanyLayout({

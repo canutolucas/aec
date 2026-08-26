@@ -52,6 +52,7 @@ export type Membership = Tables["memberships"]["Row"];
 export type BankAccount = Tables["bank_accounts"]["Row"];
 export type Category = Tables["categories"]["Row"];
 export type Counterparty = Tables["counterparties"]["Row"];
+export type CostCenter = Tables["cost_centers"]["Row"];
 export type MonthlyClosing = Tables["monthly_closings"]["Row"];
 export type StatementImport = Tables["statement_imports"]["Row"];
 export type StatementLine = Tables["statement_lines"]["Row"];
@@ -113,6 +114,12 @@ export const ACCOUNT_KIND_LABELS: Record<BankAccountKind, string> = {
   aplicacao: "Aplicacao",
   cartao_credito: "Cartao de credito",
   caixa: "Caixa",
+};
+
+export const CATEGORY_KIND_LABELS: Record<CategoryKind, string> = {
+  entrada: "Entrada",
+  saida: "Saida",
+  ambos: "Entrada ou saida",
 };
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
