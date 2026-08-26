@@ -72,6 +72,17 @@ async function requireLineInCompany(
   return { ok: true };
 }
 
+function isValidLineShape(line: ImportedLine): boolean {
+  return (
+    typeof line.postedAt === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(line.postedAt) &&
+    Number.isSafeInteger(line.amount) &&
+    typeof line.memo === "string" &&
+    typeof line.dedupKey === "string" &&
+    line.dedupKey.length > 0
+  );
+}
+
 function parsePayload(value: string): ImportPayload | null {
   try {
     const payload = JSON.parse(value) as ImportPayload;
@@ -84,17 +95,19 @@ function parsePayload(value: string): ImportPayload | null {
       return null;
     }
 
-    const valid = payload.lines.every(
-      (line) =>
-        typeof line.postedAt === "string" &&
-        /^\d{4}-\d{2}-\d{2}$/.test(line.postedAt) &&
-        Number.isSafeInteger(line.amount) &&
-        line.amount !== 0 &&
-        typeof line.memo === "string" &&
-        typeof line.dedupKey === "string" &&
-        line.dedupKey.length > 0,
-    );
-    return valid ? payload : null;
+    if (!payload.lines.every(isValidLineShape)) return null;
+
+    // A zero-amount line is malformed, not just uninteresting: statement_lines
+    // has `check (amount <> 0)`, so inserting one would fail the whole batch
+    // at the database. csv.ts already drops these before they get this far;
+    // ofx.ts and node/cora.ts don't filter them (a $0.00 informational line
+    // is rarer but not impossible in a real export), so the same drop
+    // happens here — one stray zero-amount line shouldn't invalidate an
+    // otherwise-good statement with hundreds of real transactions.
+    const lines = payload.lines.filter((line) => line.amount !== 0);
+    if (lines.length === 0) return null;
+
+    return { ...payload, lines };
   } catch {
     return null;
   }
@@ -175,18 +188,32 @@ export async function importStatement(input: {
     return { ok: false, error: importError?.message ?? "Nao foi possivel registrar a importacao." };
   }
 
-  const { data: existing, error: existingError } = await supabase
-    .from("statement_lines")
-    .select("dedup_key")
-    .eq("company_id", input.companyId)
-    .eq("bank_account_id", input.bankAccountId)
-    .in(
-      "dedup_key",
-      payload.lines.map((line) => line.dedupKey),
-    );
-  if (existingError) return { ok: false, error: existingError.message };
+  // Chunked: dedup_key is a PostgREST `.in()` filter, which travels in the
+  // URL, not the request body. A single statement can legitimately carry a
+  // few thousand lines (a full year, daily movement); an unchunked `.in()`
+  // over all of them at once risks the URL outgrowing what a proxy in front
+  // of Supabase allows, failing the whole import with a length-limit error
+  // instead of an actionable one.
+  const CHUNK_SIZE = 200;
+  const existingKeys = new Set<string>();
+  for (let i = 0; i < payload.lines.length; i += CHUNK_SIZE) {
+    const dedupKeys = payload.lines.slice(i, i + CHUNK_SIZE).map((line) => line.dedupKey);
+    const { data: existing, error: existingError } = await supabase
+      .from("statement_lines")
+      .select("dedup_key")
+      .eq("company_id", input.companyId)
+      .eq("bank_account_id", input.bankAccountId)
+      .in("dedup_key", dedupKeys);
+    if (existingError) return { ok: false, error: existingError.message };
+    for (const row of existing ?? []) existingKeys.add(row.dedup_key);
+  }
 
-  const existingKeys = new Set((existing ?? []).map((line) => line.dedup_key as string));
+  // The insert itself is NOT chunked, on purpose: it travels as a POST
+  // body (not a URL), where size limits are far more generous, and a
+  // single INSERT is one atomic statement — splitting it into batches
+  // would mean a failure partway through leaves some of the statement's
+  // lines written and the rest missing, silently, which is worse than the
+  // problem chunking the .in() lookup above solves.
   const lines = payload.lines.filter((line) => !existingKeys.has(line.dedupKey));
   if (lines.length > 0) {
     const { error: linesError } = await supabase.from("statement_lines").insert(

@@ -82,12 +82,17 @@ export default async function ReconciliationPage({
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("priority"),
-    // Uma linha por conta: a importacao mais recente e a que prova o saldo.
+    // Uma linha por conta: a que prova o saldo e a que declara o balanço MAIS
+    // RECENTE, nao a importacao mais recente. Alguem pode importar um
+    // extrato antigo (um backfill de marco) depois de ja ter importado um
+    // mais novo (maio) — nesse caso created_at do backfill e maior, mas
+    // statement_balance_date dele e menor, e e essa data que importa aqui.
     supabase
       .from("statement_imports")
       .select("bank_account_id, statement_balance, statement_balance_date, created_at")
       .eq("company_id", companyId)
       .not("statement_balance", "is", null)
+      .order("statement_balance_date", { ascending: false })
       .order("created_at", { ascending: false }),
     // So o necessario para reconstruir o saldo: sem isso, a prova do saldo
     // do extrato contra o saldo do sistema nao teria como ser feita.

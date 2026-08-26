@@ -92,7 +92,14 @@ export function ReconciliationClient({
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [statement, setStatement] = useState<CanonicalStatement | null>(null);
   const [fileName, setFileName] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  // Tone travels with the message instead of being guessed back from its
+  // text (matching against substrings like "criado" broke the moment a
+  // message needed to report a partial failure inside an otherwise
+  // successful action — see createFromLine below).
+  const [feedback, setFeedback] = useState<{
+    text: string;
+    tone: "success" | "warn" | "error";
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Draft state for the divergence panel: one category choice, one ignore
@@ -150,7 +157,7 @@ export function ReconciliationClient({
 
   async function readFile(file: File | undefined) {
     if (!file) return;
-    setMessage(null);
+    setFeedback(null);
     setStatement(null);
     setFileName(file.name);
 
@@ -160,7 +167,7 @@ export function ReconciliationClient({
         const base64 = await fileToBase64(file);
         const result = await parsePdfStatement(companyId, base64);
         if (!result.ok) {
-          setMessage(result.error);
+          setFeedback({ text: result.error, tone: "error" });
           return;
         }
         setStatement(result.statement);
@@ -176,14 +183,18 @@ export function ReconciliationClient({
 
       const detected = detectMapping(content);
       if (!detected.mapping) {
-        setMessage(
-          `${detected.problems.join(" ")} Exporte em OFX ou use um CSV com Data, Historico e Valor.`,
-        );
+        setFeedback({
+          text: `${detected.problems.join(" ")} Exporte em OFX ou use um CSV com Data, Historico e Valor.`,
+          tone: "error",
+        });
         return;
       }
       setStatement(parseStatementCsv(content, detected.mapping));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel ler este arquivo.");
+      setFeedback({
+        text: error instanceof Error ? error.message : "Nao foi possivel ler este arquivo.",
+        tone: "error",
+      });
     }
   }
 
@@ -209,8 +220,10 @@ export function ReconciliationClient({
           })),
         }),
       });
-      setMessage(
-        result.ok ? "Extrato importado. Revise os pareamentos abaixo." : (result.error ?? null),
+      setFeedback(
+        result.ok
+          ? { text: "Extrato importado. Revise os pareamentos abaixo.", tone: "success" }
+          : { text: result.error ?? "Nao foi possivel importar o extrato.", tone: "error" },
       );
       if (result.ok) {
         setStatement(null);
@@ -226,7 +239,11 @@ export function ReconciliationClient({
         statementLineId: match.line.id,
         transactionId: match.transaction.id,
       });
-      setMessage(result.ok ? "Lancamento conciliado." : (result.error ?? null));
+      setFeedback(
+        result.ok
+          ? { text: "Lancamento conciliado.", tone: "success" }
+          : { text: result.error ?? "Nao foi possivel conciliar.", tone: "error" },
+      );
       if (result.ok) router.refresh();
     });
   }
@@ -234,7 +251,11 @@ export function ReconciliationClient({
   function undoMatch(line: StatementLine) {
     startTransition(async () => {
       const result = await unreconcileLine({ companyId, statementLineId: line.id });
-      setMessage(result.ok ? "Conciliacao desfeita." : (result.error ?? null));
+      setFeedback(
+        result.ok
+          ? { text: "Conciliacao desfeita.", tone: "success" }
+          : { text: result.error ?? "Nao foi possivel desfazer.", tone: "error" },
+      );
       if (result.ok) router.refresh();
     });
   }
@@ -259,24 +280,40 @@ export function ReconciliationClient({
         ruleId,
       });
       if (!result.ok) {
-        setMessage(result.error ?? null);
+        setFeedback({
+          text: result.error ?? "Nao foi possivel criar o lancamento.",
+          tone: "error",
+        });
         return;
       }
 
+      let ruleMessage = "";
+      let ruleFailed = false;
       if (saveRule && categoryId) {
         const matchText = suggestRuleText(line.memo);
         if (matchText) {
-          await createMatchingRule({
+          const ruleResult = await createMatchingRule({
             companyId,
             matchText,
             categoryId,
             bankAccountId: line.bank_account_id,
             direction: directionOf(fromDb(line.amount)),
           });
+          // The transaction is already created at this point — a failed rule
+          // save is a real but secondary problem, so it's appended to the
+          // success message (with a warn tone) rather than reported as if
+          // the whole action had failed.
+          if (!ruleResult.ok) {
+            ruleFailed = true;
+            ruleMessage = ` A regra de categorização não foi salva: ${ruleResult.error ?? "erro desconhecido"}.`;
+          }
         }
       }
 
-      setMessage("Lancamento criado a partir do extrato.");
+      setFeedback({
+        text: `Lancamento criado a partir do extrato.${ruleMessage}`,
+        tone: ruleFailed ? "warn" : "success",
+      });
       router.refresh();
     });
   }
@@ -284,12 +321,16 @@ export function ReconciliationClient({
   function ignoreFromLine(line: StatementLine) {
     const reason = (reasonDrafts[line.id] ?? "").trim();
     if (!reason) {
-      setMessage("Informe o motivo para ignorar esta linha.");
+      setFeedback({ text: "Informe o motivo para ignorar esta linha.", tone: "error" });
       return;
     }
     startTransition(async () => {
       const result = await ignoreLine({ companyId, statementLineId: line.id, reason });
-      setMessage(result.ok ? "Linha ignorada." : (result.error ?? null));
+      setFeedback(
+        result.ok
+          ? { text: "Linha ignorada.", tone: "success" }
+          : { text: result.error ?? "Nao foi possivel ignorar a linha.", tone: "error" },
+      );
       if (result.ok) router.refresh();
     });
   }
@@ -320,21 +361,7 @@ export function ReconciliationClient({
 
   return (
     <div className="space-y-6">
-      {message && (
-        <Alert
-          tone={
-            message.includes("importado") ||
-            message.includes("conciliado") ||
-            message.includes("criado") ||
-            message.includes("desfeita") ||
-            message.includes("ignorada")
-              ? "success"
-              : "error"
-          }
-        >
-          {message}
-        </Alert>
-      )}
+      {feedback && <Alert tone={feedback.tone}>{feedback.text}</Alert>}
 
       <Card>
         <CardHeader title="Importar extrato" />
