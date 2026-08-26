@@ -1,36 +1,20 @@
-import type { BankAccount, Company } from "@aec/db";
+import { queryKeys, useBankAccounts } from "@aec/db";
 import { parseUserInput, toDb } from "@aec/domain";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Button, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { supabase } from "@/lib/supabase";
 
-async function loadEntryContext() {
-  const { data: memberships, error: membershipError } = await supabase
-    .from("memberships")
-    .select("companies (id, name, legal_name, tax_id, timezone, is_active)")
-    .limit(1);
-  if (membershipError) throw membershipError;
-  const company = memberships?.[0]?.companies as unknown as Company | null;
-  if (!company) return { company: null, accounts: [] as BankAccount[] };
-  const { data, error } = await supabase
-    .from("bank_accounts")
-    .select("*")
-    .eq("company_id", company.id)
-    .eq("is_active", true)
-    .order("name");
-  if (error) throw error;
-  return { company, accounts: (data ?? []) as BankAccount[] };
-}
-
 export default function QuickEntryScreen() {
+  // companyId comes from the dashboard's own company switcher — this screen
+  // never re-derives "the" company on its own, so it can never disagree with
+  // whichever company the person was actually looking at.
+  const { companyId } = useLocalSearchParams<{ companyId: string }>();
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: ["mobile-entry-context"],
-    queryFn: loadEntryContext,
-  });
+  const accounts = useBankAccounts(supabase, companyId ?? "", { enabled: !!companyId });
+
   const [accountIndex, setAccountIndex] = useState(0);
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -38,10 +22,10 @@ export default function QuickEntryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const account = data?.accounts[accountIndex];
+  const account = accounts.data?.[accountIndex];
 
   async function save() {
-    if (!data?.company || !account) return;
+    if (!companyId || !account) return;
     setError(null);
     let cents: number;
     try {
@@ -58,7 +42,7 @@ export default function QuickEntryScreen() {
     setSaving(true);
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
     const { error: insertError } = await supabase.from("transactions").insert({
-      company_id: data.company.id,
+      company_id: companyId,
       bank_account_id: account.id,
       booking_date: today,
       competence_date: today,
@@ -71,16 +55,32 @@ export default function QuickEntryScreen() {
       setError(insertError.message);
       return;
     }
-    await queryClient.invalidateQueries({ queryKey: ["mobile-dashboard"] });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.accountBalances(companyId) });
     router.back();
   }
 
-  if (isLoading) return <Text style={styles.page}>Carregando...</Text>;
+  // A disabled query (no companyId) reports isLoading=false, not true — so
+  // this has to be its own check, or a stale/absent route param (a cold
+  // start replaying navigation state, a future deep link) would render a
+  // blank screen with no accounts, no error, and a silently disabled save
+  // button instead of telling the person what to do.
+  if (!companyId) {
+    return (
+      <View style={styles.page}>
+        <Text style={styles.error}>
+          Não foi possível identificar a empresa. Volte ao painel e tente de novo.
+        </Text>
+        <Button title="Voltar" color="#01416d" onPress={() => router.back()} />
+      </View>
+    );
+  }
+
+  if (accounts.isLoading) return <Text style={styles.page}>Carregando...</Text>;
 
   return (
     <View style={styles.page}>
       <Text style={styles.title}>Lançamento rápido</Text>
-      {data?.accounts.map((item, index) => (
+      {accounts.data?.map((item, index) => (
         <Button
           key={item.id}
           title={`${accountIndex === index ? "✓ " : ""}${item.name}`}
