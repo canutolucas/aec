@@ -3,6 +3,7 @@ export * from "./components/badge";
 export * from "./components/bank-badge";
 export * from "./components/button";
 export * from "./components/card";
+export * from "./components/dropzone";
 export * from "./components/empty-state";
 export * from "./components/form-fields";
 export * from "./components/logo";

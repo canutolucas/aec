@@ -11,13 +11,7 @@ import {
   matchStatement,
   suggestRuleText,
 } from "@aec/domain";
-import {
-  type CanonicalStatement,
-  detectMapping,
-  parseOfx,
-  parseStatementCsv,
-  toMatchableLines,
-} from "@aec/statements";
+import { type CanonicalStatement, toMatchableLines } from "@aec/statements";
 import { Alert, Badge, Button, Card, CardHeader, EmptyState, Field, Select } from "@aec/ui";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -27,30 +21,16 @@ import {
   createTransactionFromLine,
   ignoreLine,
   importStatement,
-  parsePdfStatement,
   reconcileLine,
   unreconcileLine,
 } from "./actions";
 import { toCategorizationRule } from "./categorization";
 import type { BalanceCheck } from "./page";
+import { parseStatementFile, statementToImportPayload } from "./parse-file";
 
 interface SuggestedMatch extends Match {
   readonly line: StatementLine;
   readonly transaction: Transaction;
-}
-
-/** Converts a File into the base64 string the PDF server action expects. */
-async function fileToBase64(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  // Chunked to avoid blowing the call stack on String.fromCharCode(...bytes)
-  // with a large statement file.
-  const CHUNK = 8192;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
 }
 
 export function ReconciliationClient({
@@ -166,41 +146,12 @@ export function ReconciliationClient({
     setStatement(null);
     setFileName(file.name);
 
-    try {
-      const isPdf = /\.pdf$/i.test(file.name);
-      if (isPdf) {
-        const base64 = await fileToBase64(file);
-        const result = await parsePdfStatement(companyId, base64);
-        if (!result.ok) {
-          setFeedback({ text: result.error, tone: "error" });
-          return;
-        }
-        setStatement(result.statement);
-        return;
-      }
-
-      const content = await file.text();
-      const isOfx = /\.(ofx|qfx)$/i.test(file.name) || content.includes("<OFX>");
-      if (isOfx) {
-        setStatement(parseOfx(content));
-        return;
-      }
-
-      const detected = detectMapping(content);
-      if (!detected.mapping) {
-        setFeedback({
-          text: `${detected.problems.join(" ")} Exporte em OFX ou use um CSV com Data, Historico e Valor.`,
-          tone: "error",
-        });
-        return;
-      }
-      setStatement(parseStatementCsv(content, detected.mapping));
-    } catch (error) {
-      setFeedback({
-        text: error instanceof Error ? error.message : "Nao foi possivel ler este arquivo.",
-        tone: "error",
-      });
+    const result = await parseStatementFile(companyId, file);
+    if (!result.ok) {
+      setFeedback({ text: result.error, tone: "error" });
+      return;
     }
+    setStatement(result.statement);
   }
 
   function importPreview() {
@@ -210,20 +161,7 @@ export function ReconciliationClient({
         companyId,
         bankAccountId: accountId,
         fileName,
-        payload: JSON.stringify({
-          source: statement.source,
-          periodStart: statement.periodStart,
-          periodEnd: statement.periodEnd,
-          ledgerBalance: statement.ledgerBalance,
-          ledgerBalanceDate: statement.ledgerBalanceDate,
-          lines: statement.lines.map((line) => ({
-            postedAt: line.postedAt,
-            amount: line.amount,
-            memo: line.memo,
-            fitid: line.fitid,
-            dedupKey: line.dedupKey,
-          })),
-        }),
+        payload: statementToImportPayload(statement),
       });
       setFeedback(
         result.ok
