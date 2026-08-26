@@ -4,7 +4,16 @@ import { ACCOUNT_KIND_LABELS, type AccountBalance, type BankAccount } from "@aec
 import { fromDb, sum } from "@aec/domain";
 import { Fragment, useState } from "react";
 
-import { Alert, Badge, Button, Card, CardHeader, EmptyState, Money } from "@/lib/ui/components";
+import {
+  Alert,
+  Badge,
+  BankBadge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Money,
+} from "@/lib/ui/components";
 import { formatDate } from "@/lib/ui/format";
 
 import { EditarContaForm } from "./editar-conta-form";
@@ -60,7 +69,10 @@ export function ContasClient({
                       <td className="px-4 py-2">
                         <p className="font-medium">{saldo.name}</p>
                         {saldo.bank_name && (
-                          <p className="text-muted-foreground text-xs">{saldo.bank_name}</p>
+                          <p className="text-muted-foreground flex items-center gap-1 text-xs">
+                            <BankBadge bankName={saldo.bank_name} />
+                            {saldo.bank_name}
+                          </p>
                         )}
                       </td>
                       <td className="text-muted-foreground px-4 py-2">
