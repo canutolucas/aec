@@ -21,7 +21,17 @@ import * as SecureStore from "expo-secure-store";
  * small JSON manifest recording how many chunks to read back and reunite.
  */
 
-const CHUNK_SIZE = 1800; // comfortably under the ~2048-byte practical ceiling
+// CHUNK_SIZE counts JS string length — UTF-16 code units — not the UTF-8
+// byte size SecureStore's ~2048-byte ceiling actually measures. A JWT and
+// most of a Supabase session are plain ASCII (1 code unit = 1 byte), but
+// user_metadata can carry accented names or other non-ASCII text, and a
+// single UTF-16 code unit can encode to up to 3 UTF-8 bytes (everything
+// outside surrogate pairs; those encode 2 code units to 4 bytes, an even
+// better ratio). Dividing the real ceiling by that worst case, instead of
+// trying to measure actual byte size, keeps every chunk safely under the
+// limit regardless of what it contains, with no dependency on a TextEncoder
+// or Buffer polyfill being present on whatever JS engine this runs on.
+const CHUNK_SIZE = 600; // 600 × 3 = 1800 bytes worst case, well under ~2048
 
 function chunkKey(key: string, index: number): string {
   return `${key}__chunk_${index}`;
@@ -92,12 +102,24 @@ export const largeSecureStore = {
     }
 
     const count = Math.ceil(value.length / CHUNK_SIZE);
-    for (let index = 0; index < count; index++) {
-      const part = value.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
-      await SecureStore.setItemAsync(chunkKey(key, index), part);
-    }
+    // The manifest is written FIRST, before any chunk — the opposite of the
+    // intuitive order, deliberately. If the process is killed partway
+    // through the loop below, the manifest already on disk still promises
+    // `count` chunks; the next call's own removeItem() (manifest-driven,
+    // the very first thing setItem does) then deletes all `count` slots
+    // regardless of which ones actually got written, so nothing from an
+    // interrupted write is ever left orphaned. Writing the chunks first and
+    // the manifest last — the previous order — had the opposite problem: a
+    // kill after the chunks but before the manifest left them permanently
+    // unreferenced, since nothing on disk would ever again claim them.
     const manifest: ChunkManifest = { chunked: true, count };
     await SecureStore.setItemAsync(key, JSON.stringify(manifest));
+    await Promise.all(
+      Array.from({ length: count }, (_, index) => {
+        const part = value.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
+        return SecureStore.setItemAsync(chunkKey(key, index), part);
+      }),
+    );
   },
 
   async removeItem(key: string): Promise<void> {
