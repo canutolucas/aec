@@ -3,7 +3,6 @@
 import type { BankAccount, Category, MatchingRule, StatementLine, Transaction } from "@aec/db";
 import {
   type Categorization,
-  type CategorizationRule,
   categorize,
   directionOf,
   formatBRL,
@@ -32,25 +31,12 @@ import {
   reconcileLine,
   unreconcileLine,
 } from "./actions";
+import { toCategorizationRule } from "./categorization";
 import type { BalanceCheck } from "./page";
 
 interface SuggestedMatch extends Match {
   readonly line: StatementLine;
   readonly transaction: Transaction;
-}
-
-function toCategorizationRule(rule: MatchingRule): CategorizationRule {
-  return {
-    id: rule.id,
-    matchText: rule.match_text,
-    bankAccountId: rule.bank_account_id,
-    direction: rule.direction,
-    categoryId: rule.category_id,
-    counterpartyId: rule.counterparty_id,
-    costCenterId: rule.cost_center_id,
-    priority: rule.priority,
-    isActive: rule.is_active,
-  };
 }
 
 /** Converts a File into the base64 string the PDF server action expects. */

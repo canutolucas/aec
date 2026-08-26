@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 
 import { hasRole, type TransactionDirection } from "@aec/db";
-import { toDb } from "@aec/domain";
+import { type Cents, fromDb, planAutoApply, toDb } from "@aec/domain";
 import { type CanonicalStatement, ImportError } from "@aec/statements";
 import { parseCoraPdf } from "@aec/statements/node";
 import { revalidatePath } from "next/cache";
@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { requireCompany } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 
+import { toCategorizationRule } from "./categorization";
 import { parsePayload } from "./parse-payload";
 
 export interface ActionResult {
@@ -315,4 +316,211 @@ export async function createMatchingRule(input: {
 
   revalidatePath(`/${input.companyId}/conciliacao`);
   return { ok: true };
+}
+
+export interface AutoApplyException {
+  readonly lineId: string;
+  readonly memo: string;
+  readonly amount: Cents;
+  readonly postedAt: string;
+}
+
+export interface AutoApplySuggestion extends AutoApplyException {
+  readonly transactionId: string;
+  readonly transactionDescription: string;
+}
+
+export interface AutoApplyFailure extends AutoApplyException {
+  readonly error: string;
+}
+
+export interface AutoApplyResult {
+  readonly ok: boolean;
+  readonly error?: string;
+  readonly reconciled?: number;
+  readonly created?: number;
+  readonly exceptions?: {
+    readonly suggested: readonly AutoApplySuggestion[];
+    readonly uncategorized: readonly AutoApplyException[];
+    /**
+     * O dominio decidiu auto-aplicar (pareamento exato ou regra com
+     * categoria), mas a RPC recusou na hora (ex.: mes ja fechado por outra
+     * via, entre a hora que a pagina carregou os dados e a hora que este
+     * lote rodou). A linha continua "pendente" no banco — nao se perde,
+     * so nao vira nem sucesso nem uma das duas excecoes normais — e por
+     * isso precisa aparecer em algum lugar, ou o total de linhas processadas
+     * nao bateria com o total de linhas que existiam.
+     */
+    readonly failed: readonly AutoApplyFailure[];
+  };
+}
+
+/**
+ * O coracao do fluxo simples: depois de subir o extrato, resolve sozinho
+ * tudo que da para resolver com confianca alta (pareamento exato, regra
+ * aprendida com categoria) e devolve so o que sobrou como excecao.
+ *
+ * Um loop de chamadas independentes as MESMAS RPCs atomicas que a tela
+ * avancada usa (reconcile_line, create_transaction_from_line) — de proposito
+ * nao e uma unica transacao SQL envolvente: se fosse, uma linha problematica
+ * no meio do lote desfaria tudo que ja tinha sido aplicado antes dela, o
+ * oposto de "aplique tudo que der, mostre so a excecao real".
+ *
+ * Nao passa pelas Server Actions reconcileLine/createTransactionFromLine
+ * (acima): elas repetem requireCompany + uma consulta de posse por linha a
+ * cada chamada, redundante aqui porque esta funcao ja buscou as linhas
+ * filtradas pela propria empresa e conta antes de decidir o que aplicar.
+ */
+export async function autoApplyReconciliation(input: {
+  companyId: string;
+  bankAccountId: string;
+}): Promise<AutoApplyResult> {
+  const session = await requireCompany(input.companyId);
+  if (!canImport(session.role))
+    return { ok: false, error: "Seu perfil nao pode conciliar extratos." };
+
+  const supabase = await createServerSupabase();
+
+  const { data: account, error: accountError } = await supabase
+    .from("bank_accounts")
+    .select("id")
+    .eq("company_id", input.companyId)
+    .eq("id", input.bankAccountId)
+    .maybeSingle();
+  if (accountError) return { ok: false, error: accountError.message };
+  if (!account) return { ok: false, error: "Conta bancaria nao encontrada." };
+
+  const [linesResult, transactionsResult, rulesResult] = await Promise.all([
+    supabase
+      .from("statement_lines")
+      .select("id, posted_at, amount, memo")
+      .eq("company_id", input.companyId)
+      .eq("bank_account_id", input.bankAccountId)
+      .eq("status", "pendente"),
+    supabase
+      .from("transactions")
+      .select("id, booking_date, amount, description, document_number")
+      .eq("company_id", input.companyId)
+      .eq("bank_account_id", input.bankAccountId)
+      .eq("reconciliation", "nao_conciliado")
+      .eq("status", "realizado"),
+    supabase
+      .from("matching_rules")
+      .select("*")
+      .eq("company_id", input.companyId)
+      .eq("is_active", true)
+      .order("priority"),
+  ]);
+
+  if (linesResult.error) return { ok: false, error: linesResult.error.message };
+  if (transactionsResult.error) return { ok: false, error: transactionsResult.error.message };
+  if (rulesResult.error) return { ok: false, error: rulesResult.error.message };
+
+  const lines = linesResult.data ?? [];
+  if (lines.length === 0) {
+    return {
+      ok: true,
+      reconciled: 0,
+      created: 0,
+      exceptions: { suggested: [], uncategorized: [], failed: [] },
+    };
+  }
+
+  const lineById = new Map(lines.map((line) => [line.id, line]));
+  const transactionById = new Map((transactionsResult.data ?? []).map((t) => [t.id, t]));
+
+  const plan = planAutoApply(
+    lines.map((line) => ({
+      id: line.id,
+      postedAt: line.posted_at,
+      amount: fromDb(line.amount),
+      memo: line.memo,
+    })),
+    (transactionsResult.data ?? []).map((t) => ({
+      id: t.id,
+      bookingDate: t.booking_date,
+      amount: fromDb(t.amount),
+      description: t.description,
+      documentNumber: t.document_number ?? undefined,
+    })),
+    (rulesResult.data ?? []).map(toCategorizationRule),
+    input.bankAccountId,
+  );
+
+  const failed: AutoApplyFailure[] = [];
+
+  let reconciled = 0;
+  for (const item of plan.reconcile) {
+    const { error } = await supabase.rpc("reconcile_line", {
+      p_line_id: item.lineId,
+      p_transaction_id: item.transactionId,
+    });
+    // Uma linha que falha (ex.: mes ja fechado por outra via) nao derruba o
+    // lote inteiro — ela so deixa de contar como aplicada, e vai para
+    // "failed" em vez de sumir (ver comentario em AutoApplyResult).
+    if (error) {
+      const line = lineById.get(item.lineId);
+      if (line) {
+        failed.push({
+          lineId: line.id,
+          memo: line.memo,
+          amount: fromDb(line.amount),
+          postedAt: line.posted_at,
+          error: error.message,
+        });
+      }
+      continue;
+    }
+    reconciled++;
+  }
+
+  let created = 0;
+  for (const item of plan.create) {
+    const { error } = await supabase.rpc("create_transaction_from_line", {
+      p_line_id: item.lineId,
+      p_category_id: item.categoryId,
+      p_description: null,
+      p_rule_id: item.ruleId,
+    });
+    if (error) {
+      const line = lineById.get(item.lineId);
+      if (line) {
+        failed.push({
+          lineId: line.id,
+          memo: line.memo,
+          amount: fromDb(line.amount),
+          postedAt: line.posted_at,
+          error: error.message,
+        });
+      }
+      continue;
+    }
+    created++;
+  }
+
+  const suggested: AutoApplySuggestion[] = plan.exceptions.suggested.flatMap((match) => {
+    const line = lineById.get(match.lineId);
+    const transaction = transactionById.get(match.transactionId);
+    if (!line || !transaction) return [];
+    return [
+      {
+        lineId: line.id,
+        memo: line.memo,
+        amount: fromDb(line.amount),
+        postedAt: line.posted_at,
+        transactionId: transaction.id,
+        transactionDescription: transaction.description,
+      },
+    ];
+  });
+
+  const uncategorized: AutoApplyException[] = plan.exceptions.uncategorized.map((line) => ({
+    lineId: line.id,
+    memo: line.memo,
+    amount: line.amount,
+    postedAt: line.postedAt,
+  }));
+
+  revalidateAfterReconciliation(input.companyId);
+  return { ok: true, reconciled, created, exceptions: { suggested, uncategorized, failed } };
 }
