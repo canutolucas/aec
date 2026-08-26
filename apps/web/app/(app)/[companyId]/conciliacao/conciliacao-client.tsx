@@ -155,6 +155,25 @@ export function ReconciliationClient({
   const reconciledForAccount = reconciledLines.filter((line) => line.bank_account_id === accountId);
   const balanceCheck = balanceChecks.find((check) => check.bankAccountId === accountId);
 
+  // Computed once per [unmatchedLines, rules] change instead of inline in the
+  // render loop below — categorize() walks the whole rules set per line, so
+  // recomputing it for every line on every keystroke in an unrelated draft
+  // input (a category pick, an ignore reason) scales with lines × rules for
+  // no reason once there are hundreds of unmatched lines pending review.
+  const suggestionByLineId = useMemo(() => {
+    const map = new Map<string, Categorization>();
+    for (const line of unmatchedLines) {
+      map.set(
+        line.id,
+        categorize(
+          { memo: line.memo, amount: fromDb(line.amount), bankAccountId: line.bank_account_id },
+          rules,
+        ),
+      );
+    }
+    return map;
+  }, [unmatchedLines, rules]);
+
   async function readFile(file: File | undefined) {
     if (!file) return;
     setFeedback(null);
@@ -335,20 +354,28 @@ export function ReconciliationClient({
     });
   }
 
-  const previewMatch = statement
-    ? matchStatement(
-        toMatchableLines(statement),
-        transactions
-          .filter((transaction) => transaction.bank_account_id === accountId)
-          .map((transaction) => ({
-            id: transaction.id,
-            bookingDate: transaction.booking_date,
-            amount: fromDb(transaction.amount),
-            description: transaction.description,
-            documentNumber: transaction.document_number ?? undefined,
-          })),
-      )
-    : null;
+  // Memoized: without it, every keystroke in an unrelated draft input
+  // (a category pick, an ignore reason) re-renders this component and
+  // reruns matchStatement over the whole preview statement again — visible
+  // input lag once a statement has a few thousand lines.
+  const previewMatch = useMemo(
+    () =>
+      statement
+        ? matchStatement(
+            toMatchableLines(statement),
+            transactions
+              .filter((transaction) => transaction.bank_account_id === accountId)
+              .map((transaction) => ({
+                id: transaction.id,
+                bookingDate: transaction.booking_date,
+                amount: fromDb(transaction.amount),
+                description: transaction.description,
+                documentNumber: transaction.document_number ?? undefined,
+              })),
+          )
+        : null,
+    [statement, accountId, transactions],
+  );
 
   if (accounts.length === 0) {
     return (
@@ -513,14 +540,9 @@ export function ReconciliationClient({
         ) : (
           <div className="divide-border divide-y">
             {unmatchedLines.map((line) => {
-              const suggested = categorize(
-                {
-                  memo: line.memo,
-                  amount: fromDb(line.amount),
-                  bankAccountId: line.bank_account_id,
-                },
-                rules,
-              );
+              // Always present: suggestionByLineId is built from this same
+              // unmatchedLines array, one entry per line, right above.
+              const suggested = suggestionByLineId.get(line.id)!;
               const categoryId = categoryDrafts[line.id] ?? suggested.categoryId ?? "";
 
               return (
