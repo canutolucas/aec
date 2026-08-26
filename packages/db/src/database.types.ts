@@ -51,7 +51,29 @@ export interface Database {
           uploaded_by?: string | null;
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "attachments_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "attachments_transaction_id_fkey";
+            columns: ["transaction_id"];
+            isOneToOne: false;
+            referencedRelation: "transactions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "attachments_uploaded_by_fkey";
+            columns: ["uploaded_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       audit_log: {
         Row: {
@@ -138,7 +160,15 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "bank_accounts_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       categories: {
         Row: {
@@ -174,7 +204,22 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "categories_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "categories_parent_id_fkey";
+            columns: ["parent_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       companies: {
         Row: {
@@ -234,7 +279,15 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "cost_centers_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       counterparties: {
         Row: {
@@ -267,7 +320,15 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "counterparties_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       matching_rules: {
         Row: {
@@ -318,7 +379,50 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "matching_rules_bank_account_fk";
+            columns: ["bank_account_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "bank_accounts";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "matching_rules_category_fk";
+            columns: ["category_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "matching_rules_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "matching_rules_cost_center_fk";
+            columns: ["cost_center_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "cost_centers";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "matching_rules_counterparty_fk";
+            columns: ["counterparty_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "counterparties";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "matching_rules_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       memberships: {
         Row: {
@@ -342,7 +446,22 @@ export interface Database {
           role?: "cliente_leitura" | "assistente" | "contador" | "owner";
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "memberships_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "memberships_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       monthly_closing_balances: {
         Row: {
@@ -360,7 +479,22 @@ export interface Database {
           bank_account_id?: string;
           closing_balance?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "monthly_closing_balances_bank_account_id_fkey";
+            columns: ["bank_account_id"];
+            isOneToOne: false;
+            referencedRelation: "bank_accounts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "monthly_closing_balances_closing_id_fkey";
+            columns: ["closing_id"];
+            isOneToOne: false;
+            referencedRelation: "monthly_closings";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       monthly_closings: {
         Row: {
@@ -402,7 +536,29 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "monthly_closings_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "monthly_closings_locked_by_fkey";
+            columns: ["locked_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "monthly_closings_reopened_by_fkey";
+            columns: ["reopened_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       profiles: {
         Row: {
@@ -426,7 +582,15 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey";
+            columns: ["id"];
+            isOneToOne: true;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       recurrences: {
         Row: {
@@ -483,7 +647,43 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "recurrences_bank_account_fk";
+            columns: ["bank_account_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "bank_accounts";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "recurrences_category_fk";
+            columns: ["category_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "recurrences_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "recurrences_cost_center_fk";
+            columns: ["cost_center_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "cost_centers";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "recurrences_counterparty_fk";
+            columns: ["counterparty_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "counterparties";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
       };
       statement_imports: {
         Row: {
@@ -531,7 +731,29 @@ export interface Database {
           imported_by?: string | null;
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "statement_imports_bank_account_fk";
+            columns: ["bank_account_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "bank_accounts";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "statement_imports_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "statement_imports_imported_by_fkey";
+            columns: ["imported_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       statement_lines: {
         Row: {
@@ -585,7 +807,43 @@ export interface Database {
           created_at?: string;
           ignored_reason?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "statement_lines_bank_account_fk";
+            columns: ["bank_account_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "bank_accounts";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "statement_lines_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "statement_lines_import_id_fkey";
+            columns: ["import_id"];
+            isOneToOne: false;
+            referencedRelation: "statement_imports";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "statement_lines_matched_by_fkey";
+            columns: ["matched_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "statement_lines_matched_transaction_id_fkey";
+            columns: ["matched_transaction_id"];
+            isOneToOne: false;
+            referencedRelation: "transactions";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       transactions: {
         Row: {
@@ -689,7 +947,64 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "transactions_bank_account_fk";
+            columns: ["bank_account_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "bank_accounts";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "transactions_category_fk";
+            columns: ["category_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "transactions_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "transactions_cost_center_fk";
+            columns: ["cost_center_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "cost_centers";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "transactions_counterparty_fk";
+            columns: ["counterparty_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "counterparties";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "transactions_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "transactions_recurrence_fk";
+            columns: ["recurrence_id"];
+            isOneToOne: false;
+            referencedRelation: "recurrences";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "transactions_settles_transaction_id_fkey";
+            columns: ["settles_transaction_id"];
+            isOneToOne: false;
+            referencedRelation: "transactions";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: {
@@ -741,6 +1056,10 @@ export interface Database {
       };
     };
     Functions: {
+      add_member: {
+        Args: { p_company_id: string; p_email: string; p_role?: string | null };
+        Returns: Database["public"]["Tables"]["memberships"]["Row"];
+      };
       close_month: {
         Args: { p_company_id: string; p_period: string; p_notes?: string | null };
         Returns: Database["public"]["Tables"]["monthly_closings"]["Row"];

@@ -151,6 +151,78 @@ const { rows: viewRows } = await client.query(`
   order by table_name
 `);
 
+// Every foreign key in the public schema, with its referencing/referenced
+// columns in matching order — needed so supabase-js can type an embedded
+// select (`.select("*, profiles(...)")`) instead of resolving it to
+// `SelectQueryError` at the type level. Built from pg_constraint's own
+// `conkey`/`confkey` (parallel arrays of column attnums), not
+// information_schema's join views: those don't expose a reliable way to
+// pair up referencing and referenced columns in order for a composite key
+// (this schema has several, e.g. categories' own company-scoped FKs),
+// whereas conkey/confkey are already positionally paired by Postgres itself.
+const { rows: fkRows } = await client.query(`
+  select
+    con.conname as constraint_name,
+    con.conrelid as conrelid,
+    con.conkey as conkey,
+    rel.relname as table_name,
+    -- Cast away from \`name\` (Postgres's internal identifier type): node-postgres
+    -- has no default parser registered for \`_name\` (array of name), the way it
+    -- does for _text/_varchar, and silently hands back the raw wire format
+    -- instead of a JS array.
+    array_agg(att.attname::text order by u.ord) as columns,
+    frel.relname as referenced_table,
+    array_agg(fatt.attname::text order by u.ord) as referenced_columns
+  from pg_constraint con
+  join pg_class rel on rel.oid = con.conrelid
+  join pg_namespace nsp on nsp.oid = rel.relnamespace
+  join pg_class frel on frel.oid = con.confrelid
+  join lateral unnest(con.conkey, con.confkey) with ordinality as u(attnum, fattnum, ord) on true
+  join pg_attribute att on att.attrelid = con.conrelid and att.attnum = u.attnum
+  join pg_attribute fatt on fatt.attrelid = con.confrelid and fatt.attnum = u.fattnum
+  where con.contype = 'f' and nsp.nspname = 'public'
+  group by con.conname, con.conrelid, con.conkey, rel.relname, frel.relname
+  order by rel.relname, con.conname
+`);
+
+// A foreign key is "one to one" (isOneToOne) when its own referencing
+// columns are also covered by a unique or primary key constraint on that
+// same table — i.e. at most one row per referenced row, not many.
+const { rows: uniqueRows } = await client.query(`
+  select conrelid, conkey from pg_constraint where contype in ('u', 'p')
+`);
+const uniqueKeySets = new Set(uniqueRows.map((r) => `${r.conrelid}:${JSON.stringify(r.conkey)}`));
+
+const relationshipsByTable = new Map();
+for (const row of fkRows) {
+  const list = relationshipsByTable.get(row.table_name) ?? [];
+  list.push({
+    foreignKeyName: row.constraint_name,
+    columns: row.columns,
+    isOneToOne: uniqueKeySets.has(`${row.conrelid}:${JSON.stringify(row.conkey)}`),
+    referencedRelation: row.referenced_table,
+    referencedColumns: row.referenced_columns,
+  });
+  relationshipsByTable.set(row.table_name, list);
+}
+
+function renderRelationships(tableName) {
+  const list = relationshipsByTable.get(tableName) ?? [];
+  if (list.length === 0) return "[];";
+  const items = list
+    .map(
+      (r) => `        {
+          foreignKeyName: ${JSON.stringify(r.foreignKeyName)};
+          columns: [${r.columns.map((c) => JSON.stringify(c)).join(", ")}];
+          isOneToOne: ${r.isOneToOne};
+          referencedRelation: ${JSON.stringify(r.referencedRelation)};
+          referencedColumns: [${r.referencedColumns.map((c) => JSON.stringify(c)).join(", ")}];
+        }`,
+    )
+    .join(",\n");
+  return `[\n${items},\n      ];`;
+}
+
 const tableBlocks = [];
 for (const { table_name: name } of tableRows) {
   const columns = await columnsOf(name);
@@ -164,7 +236,7 @@ ${renderInsert(columns)}
       Update: {
 ${renderUpdate(columns)}
       };
-      Relationships: [];
+      Relationships: ${renderRelationships(name)}
     };`);
 }
 

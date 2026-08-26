@@ -30,8 +30,7 @@ export async function listMyCompanies(client: DbClient): Promise<CompanyMembersh
     .order("created_at", { ascending: true });
 
   const rows = unwrap(result);
-  return rows.flatMap((row) => {
-    const company = row.companies as unknown as Company | null;
-    return company && company.is_active ? [{ ...company, role: row.role }] : [];
-  });
+  return rows.flatMap((row) =>
+    row.companies && row.companies.is_active ? [{ ...row.companies, role: row.role }] : [],
+  );
 }

@@ -49,6 +49,7 @@ export type PaymentMethod = Enums["payment_method"];
 
 export type Company = Tables["companies"]["Row"];
 export type Membership = Tables["memberships"]["Row"];
+export type Profile = Tables["profiles"]["Row"];
 export type BankAccount = Tables["bank_accounts"]["Row"];
 export type Category = Tables["categories"]["Row"];
 export type Counterparty = Tables["counterparties"]["Row"];

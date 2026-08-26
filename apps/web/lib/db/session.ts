@@ -39,17 +39,14 @@ export async function listCompanies(): Promise<Array<Company & { role: MemberRol
   // o contrario na hora de decidir o que a interface mostra.
   const { data, error } = await supabase
     .from("memberships")
-    .select("role, companies (id, name, legal_name, tax_id, timezone, is_active)")
+    .select("role, companies (*)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
   if (error) throw error;
 
   return (data ?? [])
-    .flatMap((row) => {
-      const company = row.companies as unknown as Company | null;
-      return company ? [{ ...company, role: row.role as MemberRole }] : [];
-    })
+    .flatMap((row) => (row.companies ? [{ ...row.companies, role: row.role }] : []))
     .filter((company) => company.is_active);
 }
 

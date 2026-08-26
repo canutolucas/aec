@@ -866,4 +866,78 @@ end $$;
 reset role;
 
 \echo ''
+\echo '== Adicionar integrante =='
+-- profiles_select_self so deixa ver o proprio perfil ou o de quem ja
+-- compartilha empresa com voce — antes do vinculo existir, nao ha como
+-- montar um INSERT direto em memberships a partir do e-mail. add_member()
+-- e SECURITY DEFINER exatamente para atravessar isso, com a checagem de
+-- papel do chamador como unica porta de entrada.
+set role authenticated;
+
+do $$
+begin
+  perform pg_temp.assert(
+    pg_temp.value_as('11111111-1111-1111-1111-111111111111',
+      $q$select role::text from public.add_member(
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'estranho@outra.com.br', 'contador')$q$
+    ) = 'contador',
+    'owner adiciona integrante existente pelo e-mail, com o papel escolhido'
+  );
+end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.add_member('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'cliente@empresa-a.com.br', 'assistente')$q$,
+  'assistente nao pode adicionar integrante (exige owner)'
+); end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '11111111-1111-1111-1111-111111111111',
+  $q$select public.add_member('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'ninguem@invalido.com.br', 'assistente')$q$,
+  'add_member recusa e-mail sem conta'
+); end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '11111111-1111-1111-1111-111111111111',
+  $q$select public.add_member('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'assistente@assessoria.com.br', 'contador')$q$,
+  'add_member recusa quem ja e integrante'
+); end $$;
+
+\echo ''
+\echo '== A empresa nao pode ficar sem nenhum responsavel =='
+do $$ begin perform pg_temp.expect_denied(
+  '11111111-1111-1111-1111-111111111111',
+  $q$delete from public.memberships
+     where company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and user_id = '11111111-1111-1111-1111-111111111111'$q$,
+  'owner (unico) nao consegue se remover da empresa'
+); end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '11111111-1111-1111-1111-111111111111',
+  $q$update public.memberships set role = 'contador'
+     where company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and user_id = '11111111-1111-1111-1111-111111111111'$q$,
+  'owner (unico) nao consegue se rebaixar'
+); end $$;
+
+reset role;
+
+-- Promove o integrante do teste acima a owner tambem, direto (nao ha RPC
+-- para "mudar papel" ainda) — simula uma empresa com dois responsaveis,
+-- o unico estado em que sair ou ser rebaixado deixa de ser bloqueado.
+update public.memberships set role = 'owner'
+ where company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+   and user_id = '44444444-4444-4444-4444-444444444444';
+
+set role authenticated;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('11111111-1111-1111-1111-111111111111',
+    $q$delete from public.memberships
+       where company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and user_id = '11111111-1111-1111-1111-111111111111'$q$) = 1,
+  'owner consegue sair quando ha outro responsavel na empresa'
+); end $$;
+
+reset role;
+
+\echo ''
 \echo '== Todos os testes de schema passaram =='

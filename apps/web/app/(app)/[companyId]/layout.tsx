@@ -13,6 +13,7 @@ const NAV = [
   { key: "contas", label: "Contas", href: routes.accounts },
   { key: "conciliacao", label: "Conciliacao", href: routes.reconciliation },
   { key: "cadastros", label: "Cadastros", href: routes.registries },
+  { key: "equipe", label: "Equipe", href: routes.team },
 ] as const;
 
 export default async function CompanyLayout({
