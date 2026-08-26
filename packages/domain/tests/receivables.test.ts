@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { fromDb } from "../src/money";
-import { type CreditTransaction, matchReceivables, type OpenInvoice } from "../src/receivables";
+import {
+  type CreditTransaction,
+  extractTaxIdFromText,
+  matchReceivables,
+  type OpenInvoice,
+} from "../src/receivables";
 
 function invoice(overrides: Partial<OpenInvoice> & { id: string; number: string }): OpenInvoice {
   return {
@@ -261,5 +266,21 @@ describe("matchReceivables — nao inventa nota para CNPJ que nao bate", () => {
     expect(result.matched).toEqual([]);
     expect(result.suggested).toEqual([]);
     expect(result.unmatchedTransactions).toHaveLength(1);
+  });
+});
+
+describe("extractTaxIdFromText", () => {
+  it("acha um CNPJ pontuado em texto livre", () => {
+    expect(extractTaxIdFromText("PIX RECEBIDO 22.333.444/0001-55 CLIENTE XYZ")).toBe(
+      "22333444000155",
+    );
+  });
+
+  it("acha um CPF pontuado em texto livre", () => {
+    expect(extractTaxIdFromText("TED JOAO SILVA 123.456.789-01")).toBe("12345678901");
+  });
+
+  it("nao acha nada quando o texto nao tem documento pontuado", () => {
+    expect(extractTaxIdFromText("PIX RECEBIDO CLIENTE SEM DOCUMENTO")).toBeUndefined();
   });
 });

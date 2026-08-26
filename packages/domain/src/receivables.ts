@@ -76,6 +76,20 @@ export interface ReceivableMatchOptions {
 
 const DEFAULTS = { retentionFloor: 0.8, noTaxIdWindowDays: 90 } as const;
 
+/**
+ * Encontra um CNPJ/CPF pontuado (XX.XXX.XXX/XXXX-XX ou XXX.XXX.XXX-XX) em
+ * texto livre — o mesmo formato que o extrato do Cora traz no histórico de
+ * toda transação (já documentado em packages/statements/src/node/cora.ts).
+ * Usado para extrair o CNPJ/CPF do pagador a partir da description de um
+ * lançamento já existente, quando ele não tem counterparty_id vinculado a
+ * um cadastro com tax_id preenchido.
+ */
+export function extractTaxIdFromText(text: string): string | undefined {
+  const found =
+    /(?<![\d.])(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2})(?![\d-])/.exec(text);
+  return found ? found[1]!.replace(/\D/g, "") : undefined;
+}
+
 function subsetsSummingTo(
   invoices: readonly OpenInvoice[],
   target: Cents,
