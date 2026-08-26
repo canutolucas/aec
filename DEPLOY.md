@@ -1,7 +1,9 @@
 # Como colocar a plataforma no ar
 
-Hoje **nao existe URL publicada**: o repositorio tem o codigo, nao um ambiente. Ha
-dois caminhos, e eles servem a proposito diferente.
+**Ja esta publicada** — Vercel (a partir desta branch) + Supabase na nuvem. O
+guia abaixo documenta como esse ambiente foi montado e como redeployar do
+zero se algum dia precisar (um projeto Vercel/Supabase novo, uma segunda
+instalacao). Ha dois caminhos, e eles servem a proposito diferente.
 
 | Caminho      | Onde roda         | Quem acessa                         | Quando usar             |
 | ------------ | ----------------- | ----------------------------------- | ----------------------- |
@@ -46,7 +48,8 @@ movimento, para ela navegar sem cadastrar nada. Nao servem para uso real.
 
 Gera uma URL de verdade, com backup automatico e acesso pelo celular. Custo:
 faixa gratuita nos dois servicos para o tamanho de uma assessoria; cerca de
-US$ 45/mes quando crescer.
+US$ 45/mes quando crescer. **E o caminho ja em uso** — os passos abaixo sao a
+referencia de como foi feito, para redeployar do zero se precisar.
 
 ### O que eu preciso de voce
 

@@ -17,14 +17,14 @@ O que a planilha nao faz e esta aqui:
 
 ## Estado atual
 
-| Fase | Escopo                                              | Situacao                                                    |
-| ---- | --------------------------------------------------- | ----------------------------------------------------------- |
-| 0    | Fundacao, schema, RLS, autenticacao                 | pronto                                                      |
-| 1    | Contas bancarias, lancamentos, saldo, transferencia | pronto                                                      |
-| 2    | Conciliacao bancaria                                | dominio e leitores (OFX, CSV, PDF) prontos; telas pendentes |
-| 3    | Fluxo de caixa projetado                            | dominio pronto; usado no painel                             |
-| 4    | Relatorios, dashboard, fechamento pela tela         | pendente                                                    |
-| 5    | Migracao da planilha e carteira multiempresa        | modelo pronto; telas pendentes                              |
+| Fase | Escopo                                              | Situacao                                                                                                                                                |
+| ---- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Fundacao, schema, RLS, autenticacao                 | pronto                                                                                                                                                  |
+| 1    | Contas bancarias, lancamentos, saldo, transferencia | pronto                                                                                                                                                  |
+| 2    | Conciliacao bancaria                                | pronto: importa OFX/CSV/PDF, sugere pareamento, cria lancamento ou ignora linha sem par, prova o saldo contra o extrato, aprende regra de categorizacao |
+| 3    | Fluxo de caixa projetado                            | dominio pronto; usado no painel                                                                                                                         |
+| 4    | Relatorios, dashboard, fechamento pela tela         | pendente                                                                                                                                                |
+| 5    | Migracao da planilha e carteira multiempresa        | modelo pronto; telas pendentes                                                                                                                          |
 
 O schema ja e multiempresa desde o primeiro dia. Habilitar a carteira e
 configuracao, nao refatoracao.
@@ -171,24 +171,43 @@ pulados.
 
 ## Como o codigo esta organizado
 
-Monorepo pnpm + Turborepo: `apps/*` sao as superficies (hoje so o web; mobile
-em construcao), `packages/*` e o que elas compartilham. Nao ha `apps/backend`
+Monorepo pnpm + Turborepo: `apps/*` sao as superficies (web completo; mobile
+com login, painel e lancamento rapido, ainda sem NativeWind nem testado num
+simulador), `packages/*` e o que elas compartilham. Nao ha `apps/backend`
 — o Supabase (PostgREST + RLS + Auth) e o backend.
 
 ```
 apps/
   web/                       Next.js — telas, Tailwind, shadcn/ui, TanStack
+  mobile/                    Expo Router — login, painel, lancamento rapido
 packages/
   domain/                    REGRAS PURAS, sem I/O — toda conta de dinheiro
   statements/
     src/universal/           OFX, CSV, dedup — roda em web e mobile
     src/node/                PDF, leitor Cora — so roda em Node (unpdf)
-  db/                        tipos do schema Supabase, compartilhados
+  db/                        cliente Supabase tipado (schema gerado), queries
+                              e hooks TanStack Query, compartilhados web/mobile
   ui/                        tema de marca (TweakCN) e componentes shadcn
   utils/                     constantes compartilhadas
 supabase/migrations/         schema versionado
 tests/sql/                   testes de schema, RLS e seeds
 ```
+
+`packages/db/src/database.types.ts` e gerado a partir do schema real por
+`packages/db/scripts/generate-types.mjs` (introspeccao direta via `pg`, sem
+depender do Supabase CLI nem de Docker). Regenerar depois de qualquer migration:
+
+```bash
+su postgres -c 'bash packages/db/scripts/dev-db.sh'
+# imprime a connection string; regenera os tipos contra ela
+node packages/db/scripts/generate-types.mjs "postgresql://postgres@127.0.0.1:54395/aec_dev"
+pnpm exec prettier --write packages/db/src/database.types.ts
+# quando terminar, o proprio dev-db.sh imprime o comando pra derrubar o Postgres
+```
+
+`dev-db.sh` existe separado de `tests/sql/run.sh` porque este ultimo derruba o
+Postgres assim que termina (e certo para um teste, inutil para gerar tipos
+contra ele) — o primeiro sobe a mesma base e deixa rodando.
 
 Cada pacote roda os proprios `type-check`/`lint`/`test` via `pnpm turbo run
 <tarefa>`; os pacotes exportam o TypeScript fonte diretamente (sem build
