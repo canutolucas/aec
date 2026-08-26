@@ -13,6 +13,7 @@ import { createServerSupabase } from "@/lib/db/supabase";
 import { Alert, Card, CardHeader, EmptyState, Money } from "@/lib/ui/components";
 import { formatMonth } from "@/lib/ui/format";
 
+import { FechamentoMes } from "./fechamento-mes";
 import { FiltroMes } from "./filtro-mes";
 import { LancamentoRapido } from "./lancamento-rapido";
 import { type LancamentoRow, LancamentosTable } from "./lancamentos-table";
@@ -104,6 +105,14 @@ export default async function LancamentosPage({
           o fechamento informando o motivo — a reabertura fica registrada.
         </Alert>
       )}
+
+      <FechamentoMes
+        companyId={companyId}
+        period={primeiroDia}
+        monthLabel={formatMonth(primeiroDia)}
+        isClosed={mesFechado}
+        canClose={hasRole(session.role, "contador")}
+      />
 
       {podeLancar && !mesFechado && (
         <Card>
