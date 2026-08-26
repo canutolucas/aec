@@ -46,6 +46,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # So para gerar os tipos abaixo (generate-types.mjs precisa do driver
+      # `pg`) — este job nao roda nem builda o resto do monorepo.
+      - run: pnpm install --frozen-lockfile
+
       # Sobe um Postgres descartavel e aplica as migrations. Nao usa Docker nem
       # o Supabase CLI: o stub em tests/sql/00_supabase_stub.sql fornece o que o
       # Supabase daria pronto (schema auth, auth.uid() e os papeis do PostgREST).
@@ -61,3 +74,24 @@ jobs:
         env:
           PGBIN: /usr/lib/postgresql/16/bin
         run: bash tests/sql/run.sh
+
+      # packages/db/src/database.types.ts e gerado, nao escrito a mao — uma
+      # migration que renomeia ou remove uma coluna sem que alguem rode
+      # generate-types.mjs de novo deixaria o tipo committado mentindo sobre
+      # o schema real, e nada mais neste CI pegaria isso (type-check roda
+      # contra o arquivo committado, nao contra o banco). Este passo sobe
+      # OUTRO Postgres descartavel (dev-db.sh, que nao derruba sozinho),
+      # gera os tipos de novo a partir dele e falha se o resultado, ja
+      # formatado como o hook de commit formataria, divergir do que esta no
+      # repositorio.
+      - name: Tipos gerados batem com o schema atual
+        env:
+          PGBIN: /usr/lib/postgresql/16/bin
+        run: |
+          bash packages/db/scripts/dev-db.sh
+          node packages/db/scripts/generate-types.mjs "postgresql://postgres@127.0.0.1:54395/aec_dev"
+          pnpm exec prettier --write packages/db/src/database.types.ts
+          git diff --exit-code packages/db/src/database.types.ts || {
+            echo "::error::packages/db/src/database.types.ts esta desatualizado — rode packages/db/scripts/dev-db.sh e depois node packages/db/scripts/generate-types.mjs <url>, e comite o resultado."
+            exit 1
+          }
