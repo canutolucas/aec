@@ -3,7 +3,16 @@ import { redirect } from "next/navigation";
 
 import { listCompanies } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
-import { Alert, Button, Card, CardHeader, Field, Input, LinkButton } from "@/lib/ui/components";
+import {
+  Alert,
+  Button,
+  Card,
+  CardHeader,
+  Field,
+  Input,
+  LinkButton,
+  Logo,
+} from "@/lib/ui/components";
 import { formatTaxId } from "@/lib/ui/format";
 import { routes, withQuery } from "@/lib/ui/routes";
 
@@ -34,7 +43,8 @@ export default async function EmpresasPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
-      <h1 className="text-xl font-semibold">Empresas</h1>
+      <Logo className="text-2xl" />
+      <h1 className="mt-4 text-xl font-semibold">Empresas</h1>
 
       {companies.length > 0 && (
         <Card className="mt-6">

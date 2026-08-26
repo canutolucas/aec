@@ -4,5 +4,6 @@ export * from "./components/button";
 export * from "./components/card";
 export * from "./components/empty-state";
 export * from "./components/form-fields";
+export * from "./components/logo";
 export * from "./components/money";
 export * from "./lib/cn";

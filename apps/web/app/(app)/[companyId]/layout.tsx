@@ -1,4 +1,5 @@
 import { ROLE_LABELS } from "@aec/db";
+import { Logo } from "@aec/ui";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -35,9 +36,12 @@ export default async function CompanyLayout({
     <div className="min-h-screen">
       <header className="border-border bg-card border-b">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{session.company.name}</p>
-            <p className="text-muted-foreground text-xs">{ROLE_LABELS[session.role]}</p>
+          <div className="flex min-w-0 items-center gap-3">
+            <Logo className="text-lg" />
+            <div className="border-border min-w-0 border-l pl-3">
+              <p className="truncate text-sm font-semibold">{session.company.name}</p>
+              <p className="text-muted-foreground text-xs">{ROLE_LABELS[session.role]}</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">

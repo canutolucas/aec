@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { createServerSupabase } from "@/lib/db/supabase";
-import { Alert, Button, Field, Input } from "@/lib/ui/components";
+import { Alert, Button, Field, Input, Logo } from "@/lib/ui/components";
 import { routes, safeDestination, withQuery } from "@/lib/ui/routes";
 
 export const metadata = { title: "Entrar — Controle Bancario" };
@@ -34,7 +34,8 @@ export default async function LoginPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      <h1 className="text-xl font-semibold">Controle Bancario</h1>
+      <Logo className="text-3xl" />
+      <h1 className="mt-4 text-xl font-semibold">Controle Bancario</h1>
       <p className="text-muted-foreground mt-1 text-sm">
         Entradas e saidas das contas, conciliadas com o extrato do banco.
       </p>
