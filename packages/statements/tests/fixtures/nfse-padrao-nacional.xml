@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse">
+  <infNFSe Id="NFS1234567890">
+    <nNFSe>2002</nNFSe>
+    <cVerif>XYZ987</cVerif>
+    <DPS>
+      <infDPS Id="DPS123">
+        <dhEmi>2025-04-05T09:00:00-03:00</dhEmi>
+        <prest>
+          <CNPJ>11222333000181</CNPJ>
+          <xNome>Assessoria Contabil Exemplo Ltda</xNome>
+        </prest>
+        <toma>
+          <CNPJ>55666777000188</CNPJ>
+          <xNome>Cliente ABC ME</xNome>
+        </toma>
+        <serv>
+          <xDescServ>Servicos de consultoria - abril/2025</xDescServ>
+        </serv>
+        <valores>
+          <vServPrest>
+            <vServ>800.00</vServ>
+          </vServPrest>
+          <trib>
+            <tribFed>
+              <vRetIRRF>12.00</vRetIRRF>
+              <vRetCSLL>8.00</vRetCSLL>
+            </tribFed>
+          </trib>
+        </valores>
+      </infDPS>
+    </DPS>
+  </infNFSe>
+</NFSe>

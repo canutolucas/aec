@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@aec/domain": "workspace:*",
+    "fast-xml-parser": "^5.11.0",
     "unpdf": "^1.8.1"
   },
   "devDependencies": {

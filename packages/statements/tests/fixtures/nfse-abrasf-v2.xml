@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CompNfse xmlns="http://www.abrasf.org.br/nfse.xsd">
+  <Nfse versao="2.03">
+    <InfNfse Id="nfse:1234">
+      <Numero>1001</Numero>
+      <CodigoVerificacao>AB12CD34</CodigoVerificacao>
+      <DataEmissao>2025-04-01T14:32:10</DataEmissao>
+      <ValoresNfse>
+        <ValorServicos>1000.00</ValorServicos>
+        <ValorLiquidoNfse>935.00</ValorLiquidoNfse>
+      </ValoresNfse>
+      <ValorIr>15.00</ValorIr>
+      <ValorCsll>10.00</ValorCsll>
+      <ValorInss>40.00</ValorInss>
+      <DeclaracaoPrestacaoServico>
+        <InfDeclaracaoPrestacaoServico>
+          <Prestador>
+            <CpfCnpj>
+              <Cnpj>11222333000181</Cnpj>
+            </CpfCnpj>
+            <RazaoSocial>Assessoria Contabil Exemplo Ltda</RazaoSocial>
+          </Prestador>
+          <Tomador>
+            <IdentificacaoTomador>
+              <CpfCnpj>
+                <Cnpj>22333444000155</Cnpj>
+              </CpfCnpj>
+            </IdentificacaoTomador>
+            <RazaoSocial>Cliente XYZ Ltda</RazaoSocial>
+          </Tomador>
+          <Servico>
+            <Discriminacao>Servicos de consultoria - abril/2025</Discriminacao>
+          </Servico>
+        </InfDeclaracaoPrestacaoServico>
+      </DeclaracaoPrestacaoServico>
+    </InfNfse>
+  </Nfse>
+</CompNfse>

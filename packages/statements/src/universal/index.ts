@@ -22,6 +22,7 @@ export {
   parseStatementCsv,
 } from "./csv";
 export * from "./dedup";
+export { type CanonicalInvoice, parseNfse } from "./nfse";
 export { decodeOfx, parseOfx, parseOfxAmount, parseOfxDate } from "./ofx";
 export * from "./types";
 
