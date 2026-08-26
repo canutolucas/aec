@@ -61,5 +61,15 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // O icone do app (icon.tsx, apple-icon.tsx, manifest.ts, icons/*) precisa
+  // ser servido a QUALQUER um, logado ou nao — e assim que o navegador busca
+  // o favicon da propria tela de login, e como o SO busca o manifest/icone
+  // para "Adicionar a tela de inicio" antes mesmo de a pessoa autenticar.
+  // Essas rotas nao tem extensao (`/icon`, `/apple-icon`, `/icons/192`) ou
+  // usam uma extensao fora da lista de imagem abaixo (`manifest.webmanifest`),
+  // entao precisam de exclusao propria — a mesma logica que ja poupa
+  // favicon.ico do redirecionamento para /login.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon$|apple-icon$|icons/|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };
