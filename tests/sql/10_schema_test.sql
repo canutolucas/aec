@@ -577,6 +577,65 @@ begin
   );
 end $$;
 
+-- create_transaction_from_line(p_rule_id): quando a categoria veio de uma
+-- regra aprendida, o acerto e contabilizado em matching_rules.hit_count.
+--
+-- Inseridas via pg_temp.run_as (nao um INSERT cru): a sessao ja esta sob
+-- `set role authenticated` neste ponto do arquivo, entao um INSERT direto
+-- ficaria sem jwt claim (auth.uid() nulo) e cairia na policy de RLS.
+do $$
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$insert into public.matching_rules (id, company_id, match_text, category_id, priority)
+       values ('99990000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+               'tarifa', 'c1c1c1c1-0000-0000-0000-000000000002', 100)$q$);
+
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$insert into public.statement_lines (id, company_id, import_id, bank_account_id, posted_at, amount, memo, dedup_key)
+       values ('11110000-0000-0000-0000-000000000005', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+               'e1e1e1e1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001',
+               '2025-04-13', -75.00, 'Tarifa de manutencao', '20250413-rule-hit')$q$);
+end $$;
+
+do $$
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.create_transaction_from_line(
+      '11110000-0000-0000-0000-000000000005', 'c1c1c1c1-0000-0000-0000-000000000002', null,
+      '99990000-0000-0000-0000-000000000001')$q$);
+
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select hit_count::text from public.matching_rules where id = '99990000-0000-0000-0000-000000000001'$q$) = '1',
+    'create_transaction_from_line incrementa hit_count da regra aplicada'
+  );
+end $$;
+
+-- Um p_rule_id inexistente (ou de outra empresa) e melhor esforco: nao
+-- impede a criacao do lancamento, so nao incrementa nada.
+do $$
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$insert into public.statement_lines (id, company_id, import_id, bank_account_id, posted_at, amount, memo, dedup_key)
+       values ('11110000-0000-0000-0000-000000000006', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+               'e1e1e1e1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001',
+               '2025-04-14', -20.00, 'Tarifa avulsa', '20250414-rule-missing')$q$);
+end $$;
+
+do $$
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.create_transaction_from_line(
+      '11110000-0000-0000-0000-000000000006', null, null,
+      '00000000-0000-0000-0000-000000000000')$q$);
+
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select status from public.statement_lines where id = '11110000-0000-0000-0000-000000000006'$q$) = 'criada',
+    'create_transaction_from_line com p_rule_id inexistente ainda cria o lancamento'
+  );
+end $$;
+
 reset role;
 
 -- create_transaction_from_line respeita a trava de mes fechado, com mensagem

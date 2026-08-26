@@ -748,7 +748,12 @@ export interface Database {
         Returns: Database["public"]["Tables"]["companies"]["Row"];
       };
       create_transaction_from_line: {
-        Args: { p_line_id: string; p_category_id?: string | null; p_description?: string | null };
+        Args: {
+          p_line_id: string;
+          p_category_id?: string | null;
+          p_description?: string | null;
+          p_rule_id?: string | null;
+        };
         Returns: Database["public"]["Tables"]["transactions"]["Row"];
       };
       create_transfer: {

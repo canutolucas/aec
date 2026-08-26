@@ -2,6 +2,7 @@
 
 import type { BankAccount, Category, MatchingRule, StatementLine, Transaction } from "@aec/db";
 import {
+  type Categorization,
   type CategorizationRule,
   categorize,
   directionOf,
@@ -238,15 +239,24 @@ export function ReconciliationClient({
     });
   }
 
-  function createFromLine(line: StatementLine) {
-    const categoryId = categoryDrafts[line.id] || null;
+  function createFromLine(
+    line: StatementLine,
+    categoryId: string | null,
+    suggestion: Categorization,
+  ) {
     const saveRule = saveRuleDrafts[line.id] ?? false;
+    // The rule only gets credit for a hit when the category actually being
+    // submitted is still the one it suggested — if the person picked a
+    // different category by hand, this creation didn't come from the rule.
+    const ruleId =
+      categoryId !== null && categoryId === suggestion.categoryId ? suggestion.appliedRuleId : null;
 
     startTransition(async () => {
       const result = await createTransactionFromLine({
         companyId,
         statementLineId: line.id,
         categoryId,
+        ruleId,
       });
       if (!result.ok) {
         setMessage(result.error ?? null);
@@ -535,7 +545,7 @@ export function ReconciliationClient({
 
                     <Button
                       size="sm"
-                      onClick={() => createFromLine(line)}
+                      onClick={() => createFromLine(line, categoryId || null, suggested)}
                       disabled={!canEdit || isPending}
                     >
                       Criar lançamento

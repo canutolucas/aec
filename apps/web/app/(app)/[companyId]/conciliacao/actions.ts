@@ -264,6 +264,8 @@ export async function createTransactionFromLine(input: {
   statementLineId: string;
   categoryId?: string | null;
   description?: string | null;
+  /** The rule that suggested categoryId, when it came from a learned rule rather than a manual pick. */
+  ruleId?: string | null;
 }): Promise<ActionResult> {
   const session = await requireCompany(input.companyId);
   if (!canImport(session.role))
@@ -277,6 +279,7 @@ export async function createTransactionFromLine(input: {
     p_line_id: input.statementLineId,
     p_category_id: input.categoryId ?? null,
     p_description: input.description ?? null,
+    p_rule_id: input.ruleId ?? null,
   });
   if (error) return { ok: false, error: error.message };
 
