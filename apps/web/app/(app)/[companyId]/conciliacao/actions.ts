@@ -43,6 +43,35 @@ function revalidateAfterReconciliation(companyId: string) {
   revalidatePath(`/${companyId}/painel`);
 }
 
+/**
+ * Confirms a statement line belongs to the company the caller claims to be
+ * acting on, before handing its id to an RPC that only takes the line id.
+ *
+ * RLS on `statement_lines` already stops a line from a company the caller
+ * isn't a member of — so this can never be bypassed to reach another
+ * tenant's data. What it protects against is different: an accountant who
+ * is legitimately a member of several client companies could otherwise
+ * pass a mismatched `companyId` (e.g. a stale tab, an old bookmark from a
+ * different company's screen) and have the action silently succeed against
+ * the wrong one, with `revalidatePath` refreshing a screen nobody is
+ * looking at while the one they ARE looking at stays stale.
+ */
+async function requireLineInCompany(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  companyId: string,
+  statementLineId: string,
+): Promise<ActionResult> {
+  const { data, error } = await supabase
+    .from("statement_lines")
+    .select("id")
+    .eq("id", statementLineId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Esta linha nao pertence a empresa selecionada." };
+  return { ok: true };
+}
+
 function parsePayload(value: string): ImportPayload | null {
   try {
     const payload = JSON.parse(value) as ImportPayload;
@@ -190,6 +219,9 @@ export async function reconcileLine(input: {
     return { ok: false, error: "Seu perfil nao pode conciliar extratos." };
 
   const supabase = await createServerSupabase();
+  const scoped = await requireLineInCompany(supabase, input.companyId, input.statementLineId);
+  if (!scoped.ok) return scoped;
+
   const { error } = await supabase.rpc("reconcile_line", {
     p_line_id: input.statementLineId,
     p_transaction_id: input.transactionId,
@@ -210,6 +242,9 @@ export async function unreconcileLine(input: {
     return { ok: false, error: "Seu perfil nao pode desfazer conciliacoes." };
 
   const supabase = await createServerSupabase();
+  const scoped = await requireLineInCompany(supabase, input.companyId, input.statementLineId);
+  if (!scoped.ok) return scoped;
+
   const { error } = await supabase.rpc("unreconcile_line", {
     p_line_id: input.statementLineId,
   });
@@ -235,6 +270,9 @@ export async function createTransactionFromLine(input: {
     return { ok: false, error: "Seu perfil nao pode lancar a partir do extrato." };
 
   const supabase = await createServerSupabase();
+  const scoped = await requireLineInCompany(supabase, input.companyId, input.statementLineId);
+  if (!scoped.ok) return scoped;
+
   const { error } = await supabase.rpc("create_transaction_from_line", {
     p_line_id: input.statementLineId,
     p_category_id: input.categoryId ?? null,
@@ -257,6 +295,9 @@ export async function ignoreLine(input: {
     return { ok: false, error: "Seu perfil nao pode ignorar linhas do extrato." };
 
   const supabase = await createServerSupabase();
+  const scoped = await requireLineInCompany(supabase, input.companyId, input.statementLineId);
+  if (!scoped.ok) return scoped;
+
   const { error } = await supabase.rpc("ignore_line", {
     p_line_id: input.statementLineId,
     p_reason: input.reason,
