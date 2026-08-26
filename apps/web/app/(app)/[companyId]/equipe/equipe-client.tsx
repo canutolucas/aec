@@ -13,7 +13,7 @@ import { type MemberRole, ROLE_LABELS } from "@aec/db";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { adicionarIntegrante, removerIntegrante } from "@/lib/db/equipe";
+import { adicionarIntegrante, alternarModoSimples, removerIntegrante } from "@/lib/db/equipe";
 import { Alert, Button, Card, CardHeader, Field, Input, Select } from "@/lib/ui/components";
 
 import type { MembershipWithProfile } from "./page";
@@ -73,12 +73,29 @@ export function EquipeClient({
     });
   }
 
+  function alternarSimples(member: MembershipWithProfile, simpleMode: boolean) {
+    startTransition(async () => {
+      const result = await alternarModoSimples(companyId, member.user_id, simpleMode);
+      if (!result.ok) {
+        setFeedback({ text: result.error ?? "Nao foi possivel salvar.", tone: "error" });
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-6">
       {feedback && <Alert tone={feedback.tone}>{feedback.text}</Alert>}
 
       <Card>
         <CardHeader title={`Integrantes (${members.length})`} />
+        {canManage && (
+          <p className="text-muted-foreground border-border border-b px-4 py-2 text-xs">
+            Modo simples: a pessoa so ve a tela de subir extrato, sem Painel, Lancamentos, Contas,
+            Conciliacao, Relatorios ou Cadastros.
+          </p>
+        )}
         <div className="divide-border divide-y">
           {members.map((member) => (
             <div key={member.id} className="flex items-center justify-between gap-3 p-4 text-sm">
@@ -95,6 +112,17 @@ export function EquipeClient({
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground text-xs">{ROLE_LABELS[member.role]}</span>
+                {canManage && (
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={member.simple_mode}
+                      disabled={isPending}
+                      onChange={(event) => alternarSimples(member, event.target.checked)}
+                    />
+                    Modo simples
+                  </label>
+                )}
                 {canManage && (
                   <Button
                     size="sm"

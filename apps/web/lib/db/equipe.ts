@@ -52,3 +52,36 @@ export async function removerIntegrante(companyId: string, userId: string): Prom
   revalidatePath(`/${companyId}/equipe`);
   return OK;
 }
+
+/**
+ * Liga/desliga o modo simples de UM integrante — preferencia de navegacao
+ * por pessoa+empresa (ver a migration de simple_mode), nunca de permissao:
+ * o papel continua sendo a unica coisa que a RLS valida. Um UPDATE direto,
+ * nao uma RPC nova: protegido pela mesma policy memberships_write (owner)
+ * que ja existe, sem o problema de ovo-e-galinha que add_member resolve
+ * (aqui a linha ja existe, so um campo dela muda).
+ */
+export async function alternarModoSimples(
+  companyId: string,
+  userId: string,
+  simpleMode: boolean,
+): Promise<ActionResult> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("memberships")
+    .update({ simple_mode: simpleMode })
+    .eq("company_id", companyId)
+    .eq("user_id", userId)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+
+  // RLS nega UPDATE em silencio: zero linhas afetadas, sem erro nenhum —
+  // o mesmo caso ja documentado em editarConta (accounts.ts) e
+  // excluirLancamento (transactions.ts).
+  if (data.length === 0) {
+    return { ok: false, error: "Nao foi possivel salvar: integrante nao encontrado." };
+  }
+
+  revalidatePath(`/${companyId}/equipe`);
+  return OK;
+}
