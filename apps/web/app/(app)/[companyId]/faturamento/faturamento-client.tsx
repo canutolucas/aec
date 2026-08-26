@@ -9,6 +9,7 @@
 
 import { INVOICE_STATUS_LABELS, type InvoiceBalance } from "@aec/db";
 import { fromDb } from "@aec/domain";
+import { decodeInvoiceXml } from "@aec/statements";
 import { Alert, Badge, Card, CardHeader, Dropzone, EmptyState, Money } from "@aec/ui";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -23,8 +24,14 @@ const STATUS_TONE: Record<InvoiceBalance["status"], "neutral" | "warn" | "succes
   cancelada: "neutral",
 };
 
+/**
+ * Le os bytes brutos (nao .text(), que sempre decodifica como UTF-8) e
+ * decodifica respeitando o encoding declarado no proprio XML — o arquivo
+ * real de Salvador/BA vem em ISO-8859-1, e nome de cliente com acento
+ * vira mojibake se lido como UTF-8 direto.
+ */
 async function readAsText(file: File): Promise<string> {
-  return file.text();
+  return decodeInvoiceXml(await file.arrayBuffer());
 }
 
 export function FaturamentoClient({
@@ -91,7 +98,7 @@ export function FaturamentoClient({
               disabled={isPending}
               onFiles={handleFiles}
               label="Arraste os XMLs das notas aqui, ou clique para escolher"
-              hint="Um arquivo .xml por nota. Pode selecionar varios de uma vez."
+              hint="Um XML por nota, ou o lote inteiro do periodo exportado pela prefeitura — os dois funcionam."
             />
           </div>
         </Card>

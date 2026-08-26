@@ -56,9 +56,15 @@ export async function importarNotas(input: {
   const failed: { fileName: string; error: string }[] = [];
 
   for (const file of input.files) {
-    let invoice;
+    // Um arquivo pode trazer uma nota so OU o lote inteiro de um periodo —
+    // e o caso real de Salvador/BA, onde a prefeitura exporta a consulta
+    // por periodo como um unico XML com dezenas de notas dentro. parseNfse
+    // ja separa as duas coisas; um erro aqui e so XML ilegivel (sintaxe),
+    // nao "essa nota especifica veio incompleta" (isso vira result.errors,
+    // sem derrubar as outras do mesmo arquivo).
+    let result;
     try {
-      invoice = parseNfse(file.xml);
+      result = parseNfse(file.xml);
     } catch (error) {
       failed.push({
         fileName: file.fileName,
@@ -66,65 +72,78 @@ export async function importarNotas(input: {
       });
       continue;
     }
+    for (const error of result.errors) {
+      failed.push({ fileName: file.fileName, error });
+    }
 
-    // Acha a contraparte pelo CNPJ/CPF; cria automaticamente quando nao
-    // existe — sem isso a pessoa teria que pre-cadastrar todo cliente antes
-    // de importar, exatamente o trabalho manual que isto existe pra evitar.
-    let counterpartyId: string | null = null;
-    if (invoice.clientTaxId) {
-      const { data: existing } = await supabase
-        .from("counterparties")
-        .select("id")
-        .eq("company_id", input.companyId)
-        .eq("tax_id", invoice.clientTaxId)
-        .maybeSingle();
+    for (const invoice of result.invoices) {
+      // Varias notas do mesmo arquivo podem falhar por motivos diferentes
+      // (uma duplicada, outra com CNPJ invalido) — identifica cada uma pelo
+      // numero da nota quando o arquivo tem mais de uma, para nao confundir
+      // qual delas deu erro.
+      const label =
+        result.invoices.length > 1 ? `${file.fileName} (nota ${invoice.number})` : file.fileName;
 
-      if (existing) {
-        counterpartyId = existing.id;
-      } else {
-        const { data: created } = await supabase
+      // Acha a contraparte pelo CNPJ/CPF; cria automaticamente quando nao
+      // existe — sem isso a pessoa teria que pre-cadastrar todo cliente
+      // antes de importar, exatamente o trabalho manual que isto existe
+      // pra evitar.
+      let counterpartyId: string | null = null;
+      if (invoice.clientTaxId) {
+        const { data: existing } = await supabase
           .from("counterparties")
-          .insert({
-            company_id: input.companyId,
-            name: invoice.clientName,
-            tax_id: invoice.clientTaxId,
-          })
           .select("id")
+          .eq("company_id", input.companyId)
+          .eq("tax_id", invoice.clientTaxId)
           .maybeSingle();
-        // Falha ao criar a contraparte (ex.: nome vazio, RLS) nao impede a
-        // nota de ser importada — so fica sem counterparty_id, que e
-        // opcional (o nome e o CNPJ do XML ja ficam gravados na propria
-        // nota, client_name/client_tax_id).
-        if (created) counterpartyId = created.id;
+
+        if (existing) {
+          counterpartyId = existing.id;
+        } else {
+          const { data: created } = await supabase
+            .from("counterparties")
+            .insert({
+              company_id: input.companyId,
+              name: invoice.clientName,
+              tax_id: invoice.clientTaxId,
+            })
+            .select("id")
+            .maybeSingle();
+          // Falha ao criar a contraparte (ex.: nome vazio, RLS) nao impede
+          // a nota de ser importada — so fica sem counterparty_id, que e
+          // opcional (o nome e o CNPJ do XML ja ficam gravados na propria
+          // nota, client_name/client_tax_id).
+          if (created) counterpartyId = created.id;
+        }
       }
-    }
 
-    const { error } = await supabase.from("invoices").insert({
-      company_id: input.companyId,
-      number: invoice.number,
-      series: invoice.series ?? null,
-      verification_code: invoice.verificationCode ?? null,
-      issued_on: invoice.issuedOn,
-      due_on: null,
-      amount: toDb(invoice.amount),
-      withheld_amount: toDb(invoice.withheldAmount),
-      counterparty_id: counterpartyId,
-      client_name: invoice.clientName,
-      client_tax_id: invoice.clientTaxId ?? null,
-      source_file_name: file.fileName,
-      created_by: session.userId,
-    });
+      const { error } = await supabase.from("invoices").insert({
+        company_id: input.companyId,
+        number: invoice.number,
+        series: invoice.series ?? null,
+        verification_code: invoice.verificationCode ?? null,
+        issued_on: invoice.issuedOn,
+        due_on: null,
+        amount: toDb(invoice.amount),
+        withheld_amount: toDb(invoice.withheldAmount),
+        counterparty_id: counterpartyId,
+        client_name: invoice.clientName,
+        client_tax_id: invoice.clientTaxId ?? null,
+        source_file_name: file.fileName,
+        created_by: session.userId,
+      });
 
-    if (error) {
-      if (error.code === "23505") {
-        duplicated++;
-      } else {
-        failed.push({ fileName: file.fileName, error: error.message });
+      if (error) {
+        if (error.code === "23505") {
+          duplicated++;
+        } else {
+          failed.push({ fileName: label, error: error.message });
+        }
+        continue;
       }
-      continue;
-    }
 
-    imported++;
+      imported++;
+    }
   }
 
   revalidatePath(`/${input.companyId}/faturamento`);
