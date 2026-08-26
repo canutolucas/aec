@@ -1,3 +1,4 @@
+import type { Database } from "@aec/db";
 import { createClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
 
@@ -7,7 +8,7 @@ function requireEnv(name: "EXPO_PUBLIC_SUPABASE_URL" | "EXPO_PUBLIC_SUPABASE_ANO
   return value;
 }
 
-export const supabase = createClient(
+export const supabase = createClient<Database>(
   requireEnv("EXPO_PUBLIC_SUPABASE_URL"),
   requireEnv("EXPO_PUBLIC_SUPABASE_ANON_KEY"),
   {

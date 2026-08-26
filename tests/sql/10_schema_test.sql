@@ -444,6 +444,167 @@ begin
 end $$;
 
 \echo ''
+\echo '== Acoes atomicas de conciliacao =='
+-- Tres linhas pendentes na conta Itau, sem par ainda no sistema.
+insert into public.statement_lines (id, company_id, import_id, bank_account_id, posted_at, amount, memo, dedup_key)
+values
+  ('11110000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'e1e1e1e1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001',
+   '2025-04-01', 100.00, 'TED assistente', '20250401-recon'),
+  ('11110000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'e1e1e1e1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001',
+   '2025-04-11', -250.00, 'Tarifa bancaria', '20250411-create'),
+  ('11110000-0000-0000-0000-000000000003', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'e1e1e1e1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001',
+   '2025-04-12', -50.00, 'Duplicata ja lancada em outra conta', '20250412-ignore');
+
+set role authenticated;
+
+-- reconcile_line: casa a linha 1 com o lancamento "Lancamento do assistente"
+-- (mesma conta, mesmo valor, ja existente na fixture de papeis).
+do $$
+declare v_transaction_id uuid;
+begin
+  -- select via value_as (nao um SELECT ... INTO cru): o config do jwt claim e
+  -- local a transacao, e cada `do` block e a sua propria transacao. Sem passar
+  -- pelo helper, a policy de RLS nao enxerga nenhum papel e a consulta volta
+  -- vazia, deixando v_transaction_id nulo.
+  v_transaction_id := pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select id::text from public.transactions where description = 'Lancamento do assistente'$q$)::uuid;
+
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    format($q$select public.reconcile_line('11110000-0000-0000-0000-000000000001', %L)$q$, v_transaction_id));
+
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select status from public.statement_lines where id = '11110000-0000-0000-0000-000000000001'$q$) = 'conciliada',
+    'reconcile_line concilia a linha do extrato'
+  );
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      format($q$select reconciliation::text from public.transactions where id = %L$q$, v_transaction_id)) = 'conciliado',
+    'reconcile_line concilia o lancamento correspondente'
+  );
+end $$;
+
+-- Confirmar de novo a mesma linha (ja tratada) e recusado.
+do $$
+declare v_transaction_id uuid;
+begin
+  v_transaction_id := pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select id::text from public.transactions where description = 'Lancamento do assistente'$q$)::uuid;
+  perform pg_temp.expect_denied('22222222-2222-2222-2222-222222222222',
+    format($q$select public.reconcile_line('11110000-0000-0000-0000-000000000001', %L)$q$, v_transaction_id),
+    'reconcile_line recusa linha ja tratada'
+  );
+end $$;
+
+-- unreconcile_line: desfaz o pareamento acima.
+do $$
+declare v_transaction_id uuid;
+begin
+  v_transaction_id := pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select id::text from public.transactions where description = 'Lancamento do assistente'$q$)::uuid;
+
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.unreconcile_line('11110000-0000-0000-0000-000000000001')$q$);
+
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select status from public.statement_lines where id = '11110000-0000-0000-0000-000000000001'$q$) = 'pendente',
+    'unreconcile_line devolve a linha para pendente'
+  );
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      format($q$select reconciliation::text from public.transactions where id = %L$q$, v_transaction_id)) = 'nao_conciliado',
+    'unreconcile_line devolve o lancamento para nao_conciliado'
+  );
+end $$;
+
+-- create_transaction_from_line: linha sem par vira lancamento novo, ja conciliado.
+do $$
+declare v_transaction_id uuid;
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.create_transaction_from_line('11110000-0000-0000-0000-000000000002', 'c1c1c1c1-0000-0000-0000-000000000002', null)$q$);
+
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select status from public.statement_lines where id = '11110000-0000-0000-0000-000000000002'$q$) = 'criada',
+    'create_transaction_from_line marca a linha como criada'
+  );
+
+  select matched_transaction_id into v_transaction_id from public.statement_lines
+   where id = '11110000-0000-0000-0000-000000000002';
+
+  perform pg_temp.assert(
+    v_transaction_id is not null,
+    'create_transaction_from_line vincula o lancamento criado a linha'
+  );
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      format($q$select description from public.transactions where id = %L$q$, v_transaction_id)) = 'Tarifa bancaria',
+    'create_transaction_from_line usa o memo do extrato quando nao ha descricao propria'
+  );
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      format($q$select reconciliation::text from public.transactions where id = %L$q$, v_transaction_id)) = 'conciliado',
+    'create_transaction_from_line ja nasce conciliado'
+  );
+end $$;
+
+-- ignore_line: exige motivo.
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.ignore_line('11110000-0000-0000-0000-000000000003', '')$q$,
+  'ignore_line recusa motivo vazio'
+); end $$;
+
+do $$
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.ignore_line('11110000-0000-0000-0000-000000000003', 'Ja lancada na conta Bradesco')$q$);
+
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select status from public.statement_lines where id = '11110000-0000-0000-0000-000000000003'$q$) = 'ignorada',
+    'ignore_line marca a linha como ignorada'
+  );
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select ignored_reason from public.statement_lines where id = '11110000-0000-0000-0000-000000000003'$q$) = 'Ja lancada na conta Bradesco',
+    'ignore_line registra o motivo'
+  );
+end $$;
+
+reset role;
+
+-- create_transaction_from_line respeita a trava de mes fechado, com mensagem
+-- clara em vez do erro cru de RLS/trigger.
+do $$
+begin
+  perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+    $q$select public.close_month('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2025-03-01')$q$);
+end $$;
+
+insert into public.statement_lines (id, company_id, import_id, bank_account_id, posted_at, amount, memo, dedup_key)
+values ('11110000-0000-0000-0000-000000000004', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        'e1e1e1e1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001',
+        '2025-03-15', 300.00, 'Linha de marco fechado', '20250315-locked');
+
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.create_transaction_from_line('11110000-0000-0000-0000-000000000004', null, null)$q$,
+  'create_transaction_from_line recusa lancar em mes fechado'
+); end $$;
+
+do $$
+begin
+  perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+    $q$select public.reopen_month('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2025-03-01', 'Reabertura para o restante dos testes')$q$);
+end $$;
+
+\echo ''
 \echo '== Trilha de auditoria =='
 -- A pergunta que a planilha nunca respondeu: quem mudou este valor, quando, e de
 -- quanto para quanto. O assistente corrige um lancamento de abril (mes aberto).

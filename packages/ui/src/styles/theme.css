@@ -61,13 +61,23 @@
    * columnar work — fixed-width digits line the decimal comma up on their
    * own, without anyone having to read digit by digit.
    */
-  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-ibm-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+  /*
+   * The fallback lives inside var(), not as a separate `:root` declaration
+   * of --font-archivo/--font-ibm-plex-mono: both `:root` and the className
+   * next/font injects on <html> target the same element with equal
+   * selector specificity, so whichever rule loads last would silently win
+   * and could shadow the real webfont. Falling back inside var() means the
+   * app's own font, when next/font defines it, always wins; the literal
+   * name only applies when nothing defines the variable at all (e.g. in
+   * Storybook or a preview that doesn't run next/font).
+   */
+  --font-sans: var(--font-archivo, "Archivo"), "Trebuchet MS", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    var(--font-ibm-plex-mono, "IBM Plex Mono"), "Cascadia Mono", ui-monospace, "SFMono-Regular",
+    monospace;
 }
 
 :root {
-  --font-archivo: "Archivo", "Trebuchet MS", ui-sans-serif, system-ui, sans-serif;
-  --font-ibm-plex-mono: "IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace;
   --background: 48 15% 93.5%;
   --foreground: 204 40% 12%;
   --card: 48 20% 97%;

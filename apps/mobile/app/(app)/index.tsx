@@ -1,49 +1,44 @@
-import type { AccountBalance, Company } from "@aec/db";
+import { useAccountBalances, useMyCompanies } from "@aec/db";
 import { formatBRL, fromDb } from "@aec/domain";
-import { useQuery } from "@tanstack/react-query";
 import { Link, router } from "expo-router";
 import { ActivityIndicator, Button, StyleSheet, Text, View } from "react-native";
 
 import { supabase } from "@/lib/supabase";
 
-async function loadDashboard() {
-  const { data: memberships, error: membershipError } = await supabase
-    .from("memberships")
-    .select("companies (id, name, legal_name, tax_id, timezone, is_active)")
-    .limit(1);
-  if (membershipError) throw membershipError;
-  const company = memberships?.[0]?.companies as unknown as Company | null;
-  if (!company) return { company: null, accounts: [] as AccountBalance[] };
-
-  const { data, error } = await supabase
-    .from("v_account_balances")
-    .select("*")
-    .eq("company_id", company.id)
-    .order("name");
-  if (error) throw error;
-  return { company, accounts: (data ?? []) as AccountBalance[] };
-}
-
 export default function DashboardScreen() {
-  const { data, error, isLoading } = useQuery({
-    queryKey: ["mobile-dashboard"],
-    queryFn: loadDashboard,
+  // Same hooks the web app's client-side screens use (packages/db), so the
+  // query and its shape can't drift between the two surfaces. The company
+  // lookup takes the first membership — there is no company switcher yet on
+  // mobile, tracked separately.
+  const companies = useMyCompanies(supabase);
+  const company = companies.data?.[0] ?? null;
+
+  const balances = useAccountBalances(supabase, company?.id ?? "", {
+    enabled: company !== null,
   });
-  if (isLoading) return <ActivityIndicator style={styles.center} color="#01416d" />;
-  if (error) return <Text style={styles.center}>Não foi possível carregar seus dados.</Text>;
-  if (!data?.company)
+
+  if (companies.isLoading) return <ActivityIndicator style={styles.center} color="#01416d" />;
+  if (companies.error)
+    return <Text style={styles.center}>Não foi possível carregar seus dados.</Text>;
+  if (!company)
     return <Text style={styles.center}>Nenhuma empresa disponível para esta conta.</Text>;
 
   return (
     <View style={styles.page}>
-      <Text style={styles.company}>{data.company.name}</Text>
+      <Text style={styles.company}>{company.name}</Text>
       <Text style={styles.title}>Saldos das contas</Text>
-      {data.accounts.map((account) => (
-        <View key={account.bank_account_id} style={styles.card}>
-          <Text>{account.name}</Text>
-          <Text style={styles.money}>{formatBRL(fromDb(account.current_balance))}</Text>
-        </View>
-      ))}
+      {balances.isLoading ? (
+        <ActivityIndicator color="#01416d" />
+      ) : balances.error ? (
+        <Text>Não foi possível carregar os saldos.</Text>
+      ) : (
+        (balances.data ?? []).map((account) => (
+          <View key={account.bank_account_id} style={styles.card}>
+            <Text>{account.name}</Text>
+            <Text style={styles.money}>{formatBRL(fromDb(account.current_balance))}</Text>
+          </View>
+        ))
+      )}
       <Link href="/(app)/quick-entry" asChild>
         <Button title="Lançamento rápido" color="#01416d" />
       </Link>

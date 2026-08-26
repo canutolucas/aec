@@ -1,9 +1,24 @@
 /**
- * Table types, mirroring supabase/migrations.
+ * Application-facing table types, derived from the generated schema.
  *
- * Written by hand on purpose, not generated: they're few and stable, so the
- * project doesn't depend on running the Supabase CLI to compile. If they
- * ever drift from the schema, the SQL tests in tests/sql are the source of truth.
+ * `database.types.ts` is regenerated straight from Postgres (see
+ * packages/db/scripts/generate-types.mjs) and is the single source of
+ * truth for column names and enum literals. The aliases below exist so the
+ * rest of the app keeps importing `BankAccount`, `Transaction` and so on —
+ * names that read better at a call site than `Database["public"]["Tables"]["bank_accounts"]["Row"]` —
+ * without hand-maintaining a second copy of the schema that could drift
+ * from the first.
+ *
+ * Two exceptions, both documented at their definition:
+ *   - `Transaction` overrides `direction` and `is_transfer`: both are
+ *     `generated always as` columns that Postgres's introspection reports
+ *     as nullable (it doesn't reason about the generating expression), but
+ *     the CASE and IS NOT NULL checks that define them mean neither is ever
+ *     actually null.
+ *   - `AccountBalance` stays hand-written: it mirrors a view, and Postgres
+ *     marks every view column nullable regardless of what the underlying
+ *     aggregate can prove, which would force a null-check on numbers this
+ *     view's own COALESCE already guarantees are never null.
  *
  * Note every monetary value arrives as a STRING. That's the Postgres driver
  * handing back `numeric` without going through floating point — convert with
@@ -17,98 +32,37 @@
  * the wire between application and schema.
  */
 
-export type MemberRole = "cliente_leitura" | "assistente" | "contador" | "owner";
-export type BankAccountKind = "corrente" | "poupanca" | "aplicacao" | "cartao_credito" | "caixa";
-export type CategoryKind = "entrada" | "saida" | "ambos";
-export type TransactionStatus = "previsto" | "realizado";
-export type TransactionDirection = "entrada" | "saida";
-export type ReconciliationStatus = "nao_conciliado" | "conciliado" | "ignorado";
-export type StatementSource = "ofx" | "csv" | "manual" | "open_finance";
-export type StatementLineStatus = "pendente" | "conciliada" | "criada" | "ignorada";
-export type PaymentMethod =
-  | "pix"
-  | "ted"
-  | "doc"
-  | "boleto"
-  | "debito_automatico"
-  | "cartao"
-  | "dinheiro"
-  | "cheque"
-  | "outro";
+import type { Database } from "./database.types";
 
-export interface Company {
-  id: string;
-  name: string;
-  legal_name: string | null;
-  tax_id: string | null;
-  timezone: string;
-  is_active: boolean;
-}
+type Tables = Database["public"]["Tables"];
+type Enums = Database["public"]["Enums"];
 
-export interface Membership {
-  id: string;
-  company_id: string;
-  user_id: string;
-  role: MemberRole;
-}
+export type MemberRole = Enums["member_role"];
+export type BankAccountKind = Enums["bank_account_kind"];
+export type CategoryKind = Enums["category_kind"];
+export type TransactionStatus = Enums["transaction_status"];
+export type TransactionDirection = Enums["transaction_direction"];
+export type ReconciliationStatus = Enums["reconciliation_status"];
+export type StatementSource = Enums["statement_source"];
+export type StatementLineStatus = Enums["statement_line_status"];
+export type PaymentMethod = Enums["payment_method"];
 
-export interface BankAccount {
-  id: string;
-  company_id: string;
-  name: string;
-  kind: BankAccountKind;
-  bank_code: string | null;
-  bank_name: string | null;
-  branch: string | null;
-  account_number: string | null;
-  opening_balance: string;
-  opening_balance_date: string;
-  minimum_balance: string | null;
-  is_active: boolean;
-}
+export type Company = Tables["companies"]["Row"];
+export type Membership = Tables["memberships"]["Row"];
+export type BankAccount = Tables["bank_accounts"]["Row"];
+export type Category = Tables["categories"]["Row"];
+export type Counterparty = Tables["counterparties"]["Row"];
+export type MonthlyClosing = Tables["monthly_closings"]["Row"];
+export type StatementImport = Tables["statement_imports"]["Row"];
+export type StatementLine = Tables["statement_lines"]["Row"];
+export type MatchingRule = Tables["matching_rules"]["Row"];
 
-export interface Category {
-  id: string;
-  company_id: string;
-  parent_id: string | null;
-  name: string;
-  kind: CategoryKind;
-  ledger_account: string | null;
-  is_active: boolean;
-}
-
-export interface Counterparty {
-  id: string;
-  company_id: string;
-  name: string;
-  tax_id: string | null;
-  is_active: boolean;
-}
-
-export interface Transaction {
-  id: string;
-  company_id: string;
-  bank_account_id: string;
-  category_id: string | null;
-  counterparty_id: string | null;
-  cost_center_id: string | null;
-  booking_date: string;
-  competence_date: string;
-  amount: string;
+export type Transaction = Omit<Tables["transactions"]["Row"], "direction" | "is_transfer"> & {
   direction: TransactionDirection;
-  status: TransactionStatus;
-  reconciliation: ReconciliationStatus;
-  payment_method: PaymentMethod | null;
-  description: string;
-  document_number: string | null;
-  notes: string | null;
-  transfer_group_id: string | null;
   is_transfer: boolean;
-  created_by: string | null;
-  created_at: string;
-}
+};
 
-/** Row from the v_account_balances view. */
+/** Row from the v_account_balances view. See the file header for why this stays hand-written. */
 export interface AccountBalance {
   bank_account_id: string;
   company_id: string;
@@ -124,49 +78,6 @@ export interface AccountBalance {
   projected_balance: string;
   overdue_amount: string;
   unreconciled_count: number;
-}
-
-export interface MonthlyClosing {
-  id: string;
-  company_id: string;
-  period: string;
-  locked_at: string | null;
-  locked_by: string | null;
-  reopened_at: string | null;
-  reopen_reason: string | null;
-}
-
-export interface StatementImport {
-  id: string;
-  company_id: string;
-  bank_account_id: string;
-  source: StatementSource;
-  file_name: string | null;
-  file_hash: string | null;
-  period_start: string | null;
-  period_end: string | null;
-  statement_balance: string | null;
-  statement_balance_date: string | null;
-  line_count: number;
-  imported_by: string | null;
-  created_at: string;
-}
-
-export interface StatementLine {
-  id: string;
-  company_id: string;
-  import_id: string;
-  bank_account_id: string;
-  posted_at: string;
-  amount: string;
-  memo: string;
-  fitid: string | null;
-  dedup_key: string;
-  status: StatementLineStatus;
-  matched_transaction_id: string | null;
-  matched_at: string | null;
-  matched_by: string | null;
-  created_at: string;
 }
 
 /** Role ranking, matching app.role_rank in the database. */

@@ -2,8 +2,10 @@
 
 import { createHash } from "node:crypto";
 
-import { hasRole, type StatementSource } from "@aec/db";
+import { hasRole, type StatementSource, type TransactionDirection } from "@aec/db";
 import { type Cents, type IsoDate, toDb } from "@aec/domain";
+import { type CanonicalStatement, ImportError } from "@aec/statements";
+import { parseCoraPdf } from "@aec/statements/node";
 import { revalidatePath } from "next/cache";
 
 import { requireCompany } from "@/lib/db/session";
@@ -23,7 +25,7 @@ interface ImportedLine {
 }
 
 interface ImportPayload {
-  readonly source: Extract<StatementSource, "ofx" | "csv">;
+  readonly source: Extract<StatementSource, "ofx" | "csv" | "pdf">;
   readonly periodStart?: IsoDate;
   readonly periodEnd?: IsoDate;
   readonly ledgerBalance?: Cents;
@@ -35,11 +37,17 @@ function canImport(role: Parameters<typeof hasRole>[0]) {
   return hasRole(role, "assistente");
 }
 
+function revalidateAfterReconciliation(companyId: string) {
+  revalidatePath(`/${companyId}/conciliacao`);
+  revalidatePath(`/${companyId}/lancamentos`);
+  revalidatePath(`/${companyId}/painel`);
+}
+
 function parsePayload(value: string): ImportPayload | null {
   try {
     const payload = JSON.parse(value) as ImportPayload;
     if (
-      (payload.source !== "ofx" && payload.source !== "csv") ||
+      (payload.source !== "ofx" && payload.source !== "csv" && payload.source !== "pdf") ||
       !Array.isArray(payload.lines) ||
       payload.lines.length === 0 ||
       payload.lines.length > 10_000
@@ -60,6 +68,32 @@ function parsePayload(value: string): ImportPayload | null {
     return valid ? payload : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Parses a Cora PDF statement on the server.
+ *
+ * `unpdf` is Node-only, so the file has to come here instead of being parsed
+ * in the browser like OFX and CSV already are. The client sends the raw
+ * bytes as base64 and gets back the same `CanonicalStatement` shape it
+ * already knows how to preview.
+ */
+export async function parsePdfStatement(
+  companyId: string,
+  base64: string,
+): Promise<{ ok: true; statement: CanonicalStatement } | { ok: false; error: string }> {
+  const session = await requireCompany(companyId);
+  if (!canImport(session.role))
+    return { ok: false, error: "Seu perfil nao pode importar extratos." };
+
+  try {
+    const bytes = Buffer.from(base64, "base64");
+    const statement = await parseCoraPdf(new Uint8Array(bytes));
+    return { ok: true, statement };
+  } catch (error) {
+    if (error instanceof ImportError) return { ok: false, error: error.message };
+    return { ok: false, error: "Nao foi possivel ler este PDF." };
   }
 }
 
@@ -145,7 +179,8 @@ export async function importStatement(input: {
   return { ok: true };
 }
 
-export async function confirmMatch(input: {
+/** Confirms a suggested pairing: statement line <-> existing transaction. */
+export async function reconcileLine(input: {
   companyId: string;
   statementLineId: string;
   transactionId: string;
@@ -155,50 +190,114 @@ export async function confirmMatch(input: {
     return { ok: false, error: "Seu perfil nao pode conciliar extratos." };
 
   const supabase = await createServerSupabase();
-  const { data: line, error: lineError } = await supabase
-    .from("statement_lines")
-    .select("id, bank_account_id, status")
-    .eq("id", input.statementLineId)
-    .eq("company_id", input.companyId)
-    .maybeSingle();
-  if (lineError || !line || line.status !== "pendente") {
-    return { ok: false, error: "Esta linha ja foi tratada ou nao pertence a empresa selecionada." };
-  }
+  const { error } = await supabase.rpc("reconcile_line", {
+    p_line_id: input.statementLineId,
+    p_transaction_id: input.transactionId,
+  });
+  if (error) return { ok: false, error: error.message };
 
-  const { data: transaction, error: transactionError } = await supabase
-    .from("transactions")
-    .select("id, bank_account_id, reconciliation")
-    .eq("id", input.transactionId)
-    .eq("company_id", input.companyId)
-    .maybeSingle();
-  if (transactionError || !transaction || transaction.bank_account_id !== line.bank_account_id) {
-    return { ok: false, error: "O lancamento escolhido nao pertence a mesma conta." };
-  }
-  if (transaction.reconciliation === "conciliado") {
-    return { ok: false, error: "Este lancamento ja esta conciliado." };
-  }
+  revalidateAfterReconciliation(input.companyId);
+  return { ok: true };
+}
 
-  const { error: lineUpdateError } = await supabase
-    .from("statement_lines")
-    .update({
-      status: "conciliada",
-      matched_transaction_id: input.transactionId,
-      matched_at: new Date().toISOString(),
-      matched_by: session.userId,
-    })
-    .eq("id", input.statementLineId)
-    .eq("status", "pendente");
-  if (lineUpdateError) return { ok: false, error: lineUpdateError.message };
+/** Undoes a reconciliation: the line goes back to pending, the transaction to unreconciled. */
+export async function unreconcileLine(input: {
+  companyId: string;
+  statementLineId: string;
+}): Promise<ActionResult> {
+  const session = await requireCompany(input.companyId);
+  if (!canImport(session.role))
+    return { ok: false, error: "Seu perfil nao pode desfazer conciliacoes." };
 
-  const { error: transactionUpdateError } = await supabase
-    .from("transactions")
-    .update({ reconciliation: "conciliado" })
-    .eq("id", input.transactionId)
-    .eq("reconciliation", "nao_conciliado");
-  if (transactionUpdateError) return { ok: false, error: transactionUpdateError.message };
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.rpc("unreconcile_line", {
+    p_line_id: input.statementLineId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidateAfterReconciliation(input.companyId);
+  return { ok: true };
+}
+
+/**
+ * Creates a transaction from a statement line with no counterpart in the
+ * system — the common case on a first import. The transaction is born
+ * already reconciled: it exists because the statement line exists.
+ */
+export async function createTransactionFromLine(input: {
+  companyId: string;
+  statementLineId: string;
+  categoryId?: string | null;
+  description?: string | null;
+}): Promise<ActionResult> {
+  const session = await requireCompany(input.companyId);
+  if (!canImport(session.role))
+    return { ok: false, error: "Seu perfil nao pode lancar a partir do extrato." };
+
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.rpc("create_transaction_from_line", {
+    p_line_id: input.statementLineId,
+    p_category_id: input.categoryId ?? null,
+    p_description: input.description ?? null,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidateAfterReconciliation(input.companyId);
+  return { ok: true };
+}
+
+/** Ignores a line on purpose (e.g. already booked in another account). */
+export async function ignoreLine(input: {
+  companyId: string;
+  statementLineId: string;
+  reason: string;
+}): Promise<ActionResult> {
+  const session = await requireCompany(input.companyId);
+  if (!canImport(session.role))
+    return { ok: false, error: "Seu perfil nao pode ignorar linhas do extrato." };
+
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.rpc("ignore_line", {
+    p_line_id: input.statementLineId,
+    p_reason: input.reason,
+  });
+  if (error) return { ok: false, error: error.message };
 
   revalidatePath(`/${input.companyId}/conciliacao`);
-  revalidatePath(`/${input.companyId}/lancamentos`);
-  revalidatePath(`/${input.companyId}/painel`);
+  return { ok: true };
+}
+
+/**
+ * Saves a learned categorization rule so the next import already arrives
+ * categorized. Offered right after creating a transaction from a line —
+ * the moment the category is freshest in whoever's mind.
+ */
+export async function createMatchingRule(input: {
+  companyId: string;
+  matchText: string;
+  categoryId?: string | null;
+  bankAccountId?: string | null;
+  direction?: TransactionDirection | null;
+}): Promise<ActionResult> {
+  const session = await requireCompany(input.companyId);
+  if (!canImport(session.role))
+    return { ok: false, error: "Seu perfil nao pode criar regras de categorizacao." };
+
+  const matchText = input.matchText.trim();
+  if (!matchText) return { ok: false, error: "Informe o texto que a regra deve procurar." };
+  if (!input.categoryId) return { ok: false, error: "Escolha uma categoria para a regra." };
+
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.from("matching_rules").insert({
+    company_id: input.companyId,
+    match_text: matchText,
+    bank_account_id: input.bankAccountId ?? null,
+    direction: input.direction ?? null,
+    category_id: input.categoryId,
+    created_by: session.userId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/${input.companyId}/conciliacao`);
   return { ok: true };
 }

@@ -12,6 +12,7 @@
 
 "use server";
 
+import type { PaymentMethod } from "@aec/db";
 import { parseUserInput, toDb } from "@aec/domain";
 import { MoneyError } from "@aec/domain";
 import { revalidatePath } from "next/cache";
@@ -60,7 +61,7 @@ interface LancamentoInput {
   categoryId?: string | null;
   counterpartyId?: string | null;
   documentNumber?: string | null;
-  paymentMethod?: string | null;
+  paymentMethod?: PaymentMethod | null;
   notes?: string | null;
 }
 

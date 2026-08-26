@@ -1,4 +1,12 @@
-import { type BankAccount, hasRole, type StatementLine, type Transaction } from "@aec/db";
+import {
+  type BankAccount,
+  type Category,
+  hasRole,
+  type MatchingRule,
+  type StatementLine,
+  type Transaction,
+} from "@aec/db";
+import { balanceOn, fromDb } from "@aec/domain";
 
 import { requireCompany } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
@@ -7,6 +15,15 @@ import { Alert } from "@/lib/ui/components";
 import { ReconciliationClient } from "./conciliacao-client";
 
 export const metadata = { title: "Conciliacao — Controle Bancario" };
+
+export interface BalanceCheck {
+  readonly bankAccountId: string;
+  readonly accountName: string;
+  readonly statementBalance: number;
+  readonly statementBalanceDate: string;
+  readonly computedBalance: number;
+  readonly diff: number;
+}
 
 export default async function ReconciliationPage({
   params,
@@ -17,7 +34,16 @@ export default async function ReconciliationPage({
   const session = await requireCompany(companyId);
   const supabase = await createServerSupabase();
 
-  const [accountsResult, linesResult, transactionsResult] = await Promise.all([
+  const [
+    accountsResult,
+    linesResult,
+    reconciledLinesResult,
+    transactionsResult,
+    categoriesResult,
+    rulesResult,
+    importsResult,
+    realizedResult,
+  ] = await Promise.all([
     supabase
       .from("bank_accounts")
       .select("*")
@@ -31,6 +57,15 @@ export default async function ReconciliationPage({
       .eq("status", "pendente")
       .order("posted_at", { ascending: false })
       .limit(500),
+    // Linhas ja tratadas recentemente: e o que permite desfazer uma
+    // conciliacao feita por engano, sem ter que ir procurar no lancamento.
+    supabase
+      .from("statement_lines")
+      .select("*")
+      .eq("company_id", companyId)
+      .in("status", ["conciliada", "criada"])
+      .order("matched_at", { ascending: false })
+      .limit(50),
     supabase
       .from("transactions")
       .select("*")
@@ -39,13 +74,103 @@ export default async function ReconciliationPage({
       .eq("status", "realizado")
       .order("booking_date", { ascending: false })
       .limit(2_000),
+    supabase
+      .from("categories")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("matching_rules")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("priority"),
+    // Uma linha por conta: a importacao mais recente e a que prova o saldo.
+    supabase
+      .from("statement_imports")
+      .select("bank_account_id, statement_balance, statement_balance_date, created_at")
+      .eq("company_id", companyId)
+      .not("statement_balance", "is", null)
+      .order("created_at", { ascending: false }),
+    // So o necessario para reconstruir o saldo: sem isso, a prova do saldo
+    // do extrato contra o saldo do sistema nao teria como ser feita.
+    supabase
+      .from("transactions")
+      .select("bank_account_id, booking_date, amount, status")
+      .eq("company_id", companyId)
+      .eq("status", "realizado"),
   ]);
 
-  for (const result of [accountsResult, linesResult, transactionsResult]) {
+  for (const result of [
+    accountsResult,
+    linesResult,
+    reconciledLinesResult,
+    transactionsResult,
+    categoriesResult,
+    rulesResult,
+    importsResult,
+    realizedResult,
+  ]) {
     if (result.error) throw result.error;
   }
 
   const canEdit = hasRole(session.role, "assistente");
+  const accounts = (accountsResult.data ?? []) as BankAccount[];
+
+  const latestImportByAccount = new Map<string, { balance: string; date: string }>();
+  for (const row of importsResult.data ?? []) {
+    // Both columns are nullable in the schema — a statement import can, in
+    // principle, declare one without the other. The balance check needs both
+    // to mean anything, so an import missing either is skipped rather than
+    // treated as "no declared balance at all" for the account.
+    if (
+      !latestImportByAccount.has(row.bank_account_id) &&
+      row.statement_balance &&
+      row.statement_balance_date
+    ) {
+      latestImportByAccount.set(row.bank_account_id, {
+        balance: row.statement_balance,
+        date: row.statement_balance_date,
+      });
+    }
+  }
+
+  const entriesByAccount = new Map<
+    string,
+    { bookingDate: string; amount: number; status: "previsto" | "realizado" }[]
+  >();
+  for (const row of realizedResult.data ?? []) {
+    const list = entriesByAccount.get(row.bank_account_id) ?? [];
+    list.push({ bookingDate: row.booking_date, amount: fromDb(row.amount), status: row.status });
+    entriesByAccount.set(row.bank_account_id, list);
+  }
+
+  const balanceChecks: BalanceCheck[] = accounts.flatMap((account) => {
+    const declared = latestImportByAccount.get(account.id);
+    if (!declared) return [];
+
+    const computed = balanceOn(
+      {
+        openingBalance: fromDb(account.opening_balance),
+        openingBalanceDate: account.opening_balance_date,
+      },
+      entriesByAccount.get(account.id) ?? [],
+      declared.date,
+    );
+    const statementBalance = fromDb(declared.balance);
+
+    return [
+      {
+        bankAccountId: account.id,
+        accountName: account.name,
+        statementBalance,
+        statementBalanceDate: declared.date,
+        computedBalance: computed,
+        diff: computed - statementBalance,
+      },
+    ];
+  });
 
   return (
     <div className="space-y-6">
@@ -65,9 +190,13 @@ export default async function ReconciliationPage({
 
       <ReconciliationClient
         companyId={companyId}
-        accounts={(accountsResult.data ?? []) as BankAccount[]}
+        accounts={accounts}
         pendingLines={(linesResult.data ?? []) as StatementLine[]}
+        reconciledLines={(reconciledLinesResult.data ?? []) as StatementLine[]}
         transactions={(transactionsResult.data ?? []) as Transaction[]}
+        categories={(categoriesResult.data ?? []) as Category[]}
+        matchingRules={(rulesResult.data ?? []) as MatchingRule[]}
+        balanceChecks={balanceChecks}
         canEdit={canEdit}
       />
     </div>
