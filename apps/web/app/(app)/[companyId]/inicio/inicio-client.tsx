@@ -12,7 +12,7 @@
  */
 
 import type { Category } from "@aec/db";
-import { formatBRL, fromDb } from "@aec/domain";
+import { directionOf, formatBRL, fromDb, suggestRuleText } from "@aec/domain";
 import type { CanonicalStatement } from "@aec/statements";
 import { Alert, Button, Card, CardHeader, Dropzone, Field, Select } from "@aec/ui";
 import { useState, useTransition } from "react";
@@ -23,6 +23,7 @@ import {
   autoApplyReconciliation,
   type AutoApplyResult,
   type AutoApplySuggestion,
+  createMatchingRule,
   createTransactionFromLine,
   importStatement,
   reconcileLine,
@@ -177,6 +178,34 @@ export function InicioClient({
         setFeedback({ text: result.error ?? "Nao foi possivel lancar.", tone: "error" });
         return;
       }
+
+      // Aprende com a escolha. Sem isto, a MESMA linha recorrente (aluguel,
+      // assinatura, folha) voltaria a pedir categoria todo mes, para
+      // sempre — exatamente o "trabalho manual" que o fluxo simples
+      // promete eliminar. A tela avancada oferece isto como uma caixinha
+      // opcional ("Salvar como regra"); aqui, onde a premissa e zero
+      // decisao extra, a regra e criada direto — se a pessoa escolheu essa
+      // categoria uma vez, aplicar de novo na proxima linha parecida e a
+      // automacao que ela pediu, nao uma decisao nova.
+      let ruleWarning = "";
+      const matchText = suggestRuleText(item.memo);
+      if (matchText) {
+        const ruleResult = await createMatchingRule({
+          companyId,
+          matchText,
+          categoryId,
+          bankAccountId: accountId,
+          direction: directionOf(item.amount),
+        });
+        // O lancamento ja foi criado nesse ponto — uma regra que falhou ao
+        // salvar nao desfaz isso, so significa que a proxima linha parecida
+        // vai pedir categoria de novo (mesmo comportamento da tela avancada).
+        if (!ruleResult.ok) {
+          ruleWarning = ` A regra nao foi salva: ${ruleResult.error ?? "erro desconhecido"}.`;
+        }
+      }
+      if (ruleWarning) setFeedback({ text: `Lancamento criado.${ruleWarning}`, tone: "warn" });
+
       setSession(
         (prev) =>
           prev && {
