@@ -1276,6 +1276,10 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["transactions"]["Row"];
       };
+      undo_transaction_from_line: {
+        Args: { p_line_id: string };
+        Returns: undefined;
+      };
       unreconcile_line: {
         Args: { p_line_id: string };
         Returns: undefined;

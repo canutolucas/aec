@@ -575,6 +575,95 @@ begin
   );
 end $$;
 
+-- undo_transaction_from_line: desfaz o lancamento criado acima (linha 002),
+-- devolvendo a linha do extrato a pendente e apagando o lancamento.
+do $$
+declare v_transaction_id uuid;
+begin
+  v_transaction_id := pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select matched_transaction_id::text from public.statement_lines where id = '11110000-0000-0000-0000-000000000002'$q$)::uuid;
+
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.undo_transaction_from_line('11110000-0000-0000-0000-000000000002')$q$);
+
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select status from public.statement_lines where id = '11110000-0000-0000-0000-000000000002'$q$) = 'pendente',
+    'undo_transaction_from_line devolve a linha para pendente'
+  );
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select (matched_transaction_id is null)::text from public.statement_lines where id = '11110000-0000-0000-0000-000000000002'$q$) = 'true',
+    'undo_transaction_from_line desvincula o lancamento da linha'
+  );
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      format($q$select (not exists(select 1 from public.transactions where id = %L))::text$q$, v_transaction_id)) = 'true',
+    'undo_transaction_from_line apaga o lancamento criado'
+  );
+end $$;
+
+-- Ja desfeita: sem lancamento criado para desfazer de novo.
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.undo_transaction_from_line('11110000-0000-0000-0000-000000000002')$q$,
+  'undo_transaction_from_line recusa uma linha que ja nao tem lancamento criado'
+); end $$;
+
+-- Papel abaixo de assistente nao consegue chamar undo_transaction_from_line.
+do $$
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$insert into public.statement_lines (id, company_id, import_id, bank_account_id, posted_at, amount, memo, dedup_key)
+       values ('11110000-0000-0000-0000-00000000000a', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+               'e1e1e1e1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001',
+               '2025-04-17', -30.00, 'Linha para teste de papel (undo)', '20250417-role-undo')$q$);
+
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.create_transaction_from_line('11110000-0000-0000-0000-00000000000a', null, null)$q$);
+end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '33333333-3333-3333-3333-333333333333',
+  $q$select public.undo_transaction_from_line('11110000-0000-0000-0000-00000000000a')$q$,
+  'cliente_leitura nao consegue chamar undo_transaction_from_line'
+); end $$;
+
+-- Um lancamento que ja tem baixa de nota fiscal vinculada nao pode ser
+-- apagado por aqui (a FK e "on delete cascade" — apagar direto levaria a
+-- nota junto sem passar pelo recalculo de status que unsettle_invoice faz).
+do $$
+declare v_transaction_id uuid;
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$insert into public.statement_lines (id, company_id, import_id, bank_account_id, posted_at, amount, memo, dedup_key)
+       values ('11110000-0000-0000-0000-00000000000b', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+               'e1e1e1e1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001',
+               '2025-04-18', 900.00, 'Recebimento com baixa de nota', '20250418-settled-undo')$q$);
+
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.create_transaction_from_line('11110000-0000-0000-0000-00000000000b', null, null)$q$);
+
+  v_transaction_id := pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select matched_transaction_id::text from public.statement_lines where id = '11110000-0000-0000-0000-00000000000b'$q$)::uuid;
+
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$insert into public.invoices (id, company_id, number, issued_on, amount, client_name)
+       values ('f1000000-0000-0000-0000-000000000009', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+               'NF-UNDO-1', '2025-04-01', 900.00, 'Cliente Teste Undo')$q$);
+
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    format($q$insert into public.invoice_settlements (company_id, invoice_id, transaction_id, amount)
+       values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'f1000000-0000-0000-0000-000000000009', %L, 900.00)$q$,
+       v_transaction_id));
+
+  perform pg_temp.expect_denied(
+    '22222222-2222-2222-2222-222222222222',
+    $q$select public.undo_transaction_from_line('11110000-0000-0000-0000-00000000000b')$q$,
+    'undo_transaction_from_line recusa lancamento com baixa de nota fiscal vinculada'
+  );
+end $$;
+
 -- ignore_line: exige motivo.
 do $$ begin perform pg_temp.expect_denied(
   '22222222-2222-2222-2222-222222222222',

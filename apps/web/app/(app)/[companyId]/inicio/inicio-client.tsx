@@ -17,7 +17,9 @@ import type { CanonicalStatement } from "@aec/statements";
 import { Alert, Button, Card, CardHeader, Dropzone, Field, LinkButton, Select } from "@aec/ui";
 import { useState, useTransition } from "react";
 
+import { desativarRegra } from "@/lib/db/cadastros";
 import { autoApplyReceivables } from "@/lib/db/faturamento";
+import { friendlyError } from "@/lib/ui/format";
 import { routes } from "@/lib/ui/routes";
 
 import {
@@ -30,6 +32,7 @@ import {
   createTransactionFromLine,
   importStatement,
   reconcileLine,
+  undoTransactionFromLine,
 } from "../conciliacao/actions";
 import { parseStatementFile, statementToImportPayload } from "../conciliacao/parse-file";
 import type { InicioAccount } from "./page";
@@ -72,6 +75,16 @@ export function InicioClient({
   const [session, setSession] = useState<SessionState | null>(null);
   const [categoryDrafts, setCategoryDrafts] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<{ text: string; tone: "warn" | "error" } | null>(null);
+  /**
+   * O ultimo item lancado por launchUncategorized, para poder desfazer com
+   * um clique. So o mais recente — nao uma pilha — porque o risco real e o
+   * erro de dedo que se percebe na hora, olhando pro item que acabou de
+   * sumir da lista, nao um historico de varios passos atras.
+   */
+  const [lastLaunch, setLastLaunch] = useState<{
+    item: AutoApplyException;
+    ruleId?: string;
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function applySession(
@@ -101,7 +114,7 @@ export function InicioClient({
       });
       if (!imported.ok) {
         setFeedback({
-          text: imported.error ?? "Nao foi possivel importar o extrato.",
+          text: friendlyError(imported.error, "Nao foi possivel importar o extrato."),
           tone: "error",
         });
         setPhase("idle");
@@ -111,9 +124,10 @@ export function InicioClient({
       const applied = await autoApplyReconciliation({ companyId, bankAccountId: accountId });
       if (!applied.ok) {
         setFeedback({
-          text:
-            applied.error ??
+          text: friendlyError(
+            applied.error,
             "O extrato foi importado, mas nao foi possivel organizar automaticamente.",
+          ),
           tone: "error",
         });
         setPhase("idle");
@@ -175,7 +189,10 @@ export function InicioClient({
         transactionId: item.transactionId,
       });
       if (!result.ok) {
-        setFeedback({ text: result.error ?? "Nao foi possivel confirmar.", tone: "error" });
+        setFeedback({
+          text: friendlyError(result.error, "Nao foi possivel confirmar."),
+          tone: "error",
+        });
         return;
       }
       setSession(
@@ -200,7 +217,10 @@ export function InicioClient({
         ruleId: null,
       });
       if (!result.ok) {
-        setFeedback({ text: result.error ?? "Nao foi possivel lancar.", tone: "error" });
+        setFeedback({
+          text: friendlyError(result.error, "Nao foi possivel lancar."),
+          tone: "error",
+        });
         return;
       }
 
@@ -213,6 +233,7 @@ export function InicioClient({
       // categoria uma vez, aplicar de novo na proxima linha parecida e a
       // automacao que ela pediu, nao uma decisao nova.
       let ruleWarning = "";
+      let ruleId: string | undefined;
       const matchText = suggestRuleText(item.memo);
       if (matchText) {
         const ruleResult = await createMatchingRule({
@@ -227,10 +248,13 @@ export function InicioClient({
         // vai pedir categoria de novo (mesmo comportamento da tela avancada).
         if (!ruleResult.ok) {
           ruleWarning = ` A regra nao foi salva: ${ruleResult.error ?? "erro desconhecido"}.`;
+        } else {
+          ruleId = ruleResult.ruleId;
         }
       }
       if (ruleWarning) setFeedback({ text: `Lancamento criado.${ruleWarning}`, tone: "warn" });
 
+      setLastLaunch({ item, ruleId });
       setSession(
         (prev) =>
           prev && {
@@ -242,11 +266,56 @@ export function InicioClient({
     });
   }
 
+  /**
+   * Desfaz o ultimo lancamento criado pelo fluxo simples — e a regra
+   * aprendida junto, se alguma foi criada, para uma categoria escolhida
+   * errado nao continuar se aplicando sozinha nos proximos meses. A linha
+   * volta para "Escolher categoria", como se nunca tivesse sido lancada.
+   */
+  function undoLastLaunch() {
+    if (!lastLaunch) return;
+    const { item, ruleId } = lastLaunch;
+    startTransition(async () => {
+      const result = await undoTransactionFromLine({ companyId, statementLineId: item.lineId });
+      if (!result.ok) {
+        setFeedback({
+          text: friendlyError(result.error, "Nao foi possivel desfazer este lancamento."),
+          tone: "error",
+        });
+        return;
+      }
+
+      let ruleWarning = "";
+      if (ruleId) {
+        const ruleResult = await desativarRegra(companyId, ruleId);
+        if (!ruleResult.ok) {
+          ruleWarning = ` A regra criada continua ativa: ${ruleResult.error ?? "erro desconhecido"}.`;
+        }
+      }
+
+      setFeedback(
+        ruleWarning ? { text: `Lancamento desfeito.${ruleWarning}`, tone: "warn" } : null,
+      );
+      setLastLaunch(null);
+      setSession(
+        (prev) =>
+          prev && {
+            ...prev,
+            created: prev.created - 1,
+            uncategorized: [item, ...prev.uncategorized],
+          },
+      );
+    });
+  }
+
   function retryFailed() {
     startTransition(async () => {
       const applied = await autoApplyReconciliation({ companyId, bankAccountId: accountId });
       if (!applied.ok) {
-        setFeedback({ text: applied.error ?? "Nao foi possivel tentar de novo.", tone: "error" });
+        setFeedback({
+          text: friendlyError(applied.error, "Nao foi possivel tentar de novo."),
+          tone: "error",
+        });
         return;
       }
       applySession(applied);
@@ -259,6 +328,7 @@ export function InicioClient({
     setPending(null);
     setFeedback(null);
     setCategoryDrafts({});
+    setLastLaunch(null);
   }
 
   const allClear =
@@ -356,6 +426,20 @@ export function InicioClient({
               />
             </div>
           </Card>
+
+          {lastLaunch && (
+            <Alert tone="info">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  Lancamento criado: {lastLaunch.item.memo || "Movimento sem historico"} ·{" "}
+                  {formatBRL(fromDb(lastLaunch.item.amount))}
+                </span>
+                <Button size="sm" variant="ghost" disabled={isPending} onClick={undoLastLaunch}>
+                  Desfazer
+                </Button>
+              </div>
+            </Alert>
+          )}
 
           {session.receivables && (
             <Card>

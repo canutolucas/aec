@@ -284,9 +284,47 @@ export async function ignoreLine(input: {
 }
 
 /**
+ * Undoes createTransactionFromLine: deletes the transaction it created and
+ * puts the statement line back to "pendente". Distinct from
+ * unreconcileLine, which only handles a line paired to an ALREADY EXISTING
+ * transaction (status "conciliada") — this one is for the "criada" case, a
+ * brand-new transaction.
+ *
+ * Exists mainly for the simple flow: a wrong click there both creates the
+ * transaction AND learns a matching rule from it (see the flow's own
+ * comment in inicio-client.tsx) — without an undo, a mis-click keeps
+ * re-applying itself every month, silently.
+ */
+export async function undoTransactionFromLine(input: {
+  companyId: string;
+  statementLineId: string;
+}): Promise<ActionResult> {
+  const session = await requireCompany(input.companyId);
+  if (!canImport(session.role))
+    return { ok: false, error: "Seu perfil nao pode desfazer lancamentos." };
+
+  const supabase = await createServerSupabase();
+  const scoped = await requireLineInCompany(supabase, input.companyId, input.statementLineId);
+  if (!scoped.ok) return scoped;
+
+  const { error } = await supabase.rpc("undo_transaction_from_line", {
+    p_line_id: input.statementLineId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidateAfterReconciliation(input.companyId);
+  return { ok: true };
+}
+
+/**
  * Saves a learned categorization rule so the next import already arrives
  * categorized. Offered right after creating a transaction from a line —
  * the moment the category is freshest in whoever's mind.
+ *
+ * Returns the new rule's id (when one was created) so a caller that turns
+ * around and creates the transaction in the same breath — the simple flow —
+ * can undo both together with desativarRegra (lib/db/cadastros.ts) if the
+ * pick turns out to be wrong.
  */
 export async function createMatchingRule(input: {
   companyId: string;
@@ -294,7 +332,7 @@ export async function createMatchingRule(input: {
   categoryId?: string | null;
   bankAccountId?: string | null;
   direction?: TransactionDirection | null;
-}): Promise<ActionResult> {
+}): Promise<ActionResult & { ruleId?: string }> {
   const session = await requireCompany(input.companyId);
   if (!canImport(session.role))
     return { ok: false, error: "Seu perfil nao pode criar regras de categorizacao." };
@@ -304,18 +342,22 @@ export async function createMatchingRule(input: {
   if (!input.categoryId) return { ok: false, error: "Escolha uma categoria para a regra." };
 
   const supabase = await createServerSupabase();
-  const { error } = await supabase.from("matching_rules").insert({
-    company_id: input.companyId,
-    match_text: matchText,
-    bank_account_id: input.bankAccountId ?? null,
-    direction: input.direction ?? null,
-    category_id: input.categoryId,
-    created_by: session.userId,
-  });
+  const { data, error } = await supabase
+    .from("matching_rules")
+    .insert({
+      company_id: input.companyId,
+      match_text: matchText,
+      bank_account_id: input.bankAccountId ?? null,
+      direction: input.direction ?? null,
+      category_id: input.categoryId,
+      created_by: session.userId,
+    })
+    .select("id")
+    .single();
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(`/${input.companyId}/conciliacao`);
-  return { ok: true };
+  return { ok: true, ruleId: data?.id };
 }
 
 export interface AutoApplyException {
