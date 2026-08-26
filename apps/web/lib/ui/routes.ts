@@ -20,6 +20,7 @@ export const routes = {
   companies: "/empresas" as Route,
 
   dashboard: (companyId: string) => `/${companyId}/painel` as Route,
+  home: (companyId: string) => `/${companyId}/inicio` as Route,
   accounts: (companyId: string) => `/${companyId}/contas` as Route,
   registries: (companyId: string) => `/${companyId}/cadastros` as Route,
   team: (companyId: string) => `/${companyId}/equipe` as Route,

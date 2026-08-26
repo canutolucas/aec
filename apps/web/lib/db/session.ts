@@ -14,7 +14,13 @@ export interface SessionContext {
   readonly email: string;
   readonly company: Company;
   readonly role: MemberRole;
-  readonly companies: ReadonlyArray<Company & { role: MemberRole }>;
+  /**
+   * Preferencia de navegacao da PESSOA nesta empresa (memberships.simple_mode)
+   * — nao e seguranca, e so troca qual casca de interface aparece. Quem
+   * decide o que a pessoa pode escrever continua sendo `role` + RLS.
+   */
+  readonly simpleMode: boolean;
+  readonly companies: ReadonlyArray<Company & { role: MemberRole; simpleMode: boolean }>;
 }
 
 export async function getUser() {
@@ -23,8 +29,10 @@ export async function getUser() {
   return data.user;
 }
 
-/** Empresas em que a pessoa tem vinculo, com o papel em cada uma. */
-export async function listCompanies(): Promise<Array<Company & { role: MemberRole }>> {
+/** Empresas em que a pessoa tem vinculo, com o papel e o modo de navegacao em cada uma. */
+export async function listCompanies(): Promise<
+  Array<Company & { role: MemberRole; simpleMode: boolean }>
+> {
   const user = await getUser();
   if (!user) return [];
 
@@ -39,14 +47,16 @@ export async function listCompanies(): Promise<Array<Company & { role: MemberRol
   // o contrario na hora de decidir o que a interface mostra.
   const { data, error } = await supabase
     .from("memberships")
-    .select("role, companies (*)")
+    .select("role, simple_mode, companies (*)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
   if (error) throw error;
 
   return (data ?? [])
-    .flatMap((row) => (row.companies ? [{ ...row.companies, role: row.role }] : []))
+    .flatMap((row) =>
+      row.companies ? [{ ...row.companies, role: row.role, simpleMode: row.simple_mode }] : [],
+    )
     .filter((company) => company.is_active);
 }
 
@@ -74,6 +84,21 @@ export async function requireCompany(companyId: string): Promise<SessionContext>
     email: user.email ?? "",
     company,
     role: company.role,
+    simpleMode: company.simpleMode,
     companies,
   };
+}
+
+/**
+ * Igual a requireCompany, mas manda quem esta no modo simples de volta para
+ * /inicio — usado no topo de toda pagina que so faz sentido no fluxo
+ * avancado (Contas, Lancamentos, Conciliacao, Relatorios, Cadastros, Equipe,
+ * Painel). Conveniencia de navegacao, como o resto deste arquivo: quem
+ * decide o que a pessoa pode LER OU ESCREVER continua sendo role + RLS,
+ * nao simpleMode.
+ */
+export async function requireAdvancedAccess(companyId: string): Promise<SessionContext> {
+  const session = await requireCompany(companyId);
+  if (session.simpleMode) redirect(routes.home(companyId));
+  return session;
 }

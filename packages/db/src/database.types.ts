@@ -431,6 +431,7 @@ export interface Database {
           user_id: string;
           role: "cliente_leitura" | "assistente" | "contador" | "owner";
           created_at: string;
+          simple_mode: boolean;
         };
         Insert: {
           id?: string;
@@ -438,6 +439,7 @@ export interface Database {
           user_id: string;
           role?: "cliente_leitura" | "assistente" | "contador" | "owner";
           created_at?: string;
+          simple_mode?: boolean;
         };
         Update: {
           id?: string;
@@ -445,6 +447,7 @@ export interface Database {
           user_id?: string;
           role?: "cliente_leitura" | "assistente" | "contador" | "owner";
           created_at?: string;
+          simple_mode?: boolean;
         };
         Relationships: [
           {
