@@ -23,6 +23,7 @@ export const routes = {
   accounts: (companyId: string) => `/${companyId}/contas` as Route,
   registries: (companyId: string) => `/${companyId}/cadastros` as Route,
   team: (companyId: string) => `/${companyId}/equipe` as Route,
+  reports: (companyId: string) => `/${companyId}/relatorios` as Route,
   reconciliation: (companyId: string) => `/${companyId}/conciliacao` as Route,
   transactions: (companyId: string, filters?: { month?: string; account?: string }) => {
     const query = new URLSearchParams();

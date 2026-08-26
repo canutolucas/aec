@@ -12,6 +12,7 @@ const NAV = [
   { key: "lancamentos", label: "Lancamentos", href: (id: string) => routes.transactions(id) },
   { key: "contas", label: "Contas", href: routes.accounts },
   { key: "conciliacao", label: "Conciliacao", href: routes.reconciliation },
+  { key: "relatorios", label: "Relatorios", href: routes.reports },
   { key: "cadastros", label: "Cadastros", href: routes.registries },
   { key: "equipe", label: "Equipe", href: routes.team },
 ] as const;
