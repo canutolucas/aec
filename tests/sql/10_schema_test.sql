@@ -780,6 +780,153 @@ begin
 end $$;
 
 \echo ''
+\echo '== Faturamento: notas e baixa de recebimento =='
+-- Duas notas do mesmo cliente (mesmo CNPJ), empresa A, ainda sem nenhum
+-- recebimento vinculado.
+insert into public.invoices (id, company_id, number, issued_on, amount, client_name, client_tax_id) values
+  ('f1000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'NF-1001', '2025-04-01', 1000.00, 'Cliente XYZ Ltda', '22333444000155'),
+  ('f1000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'NF-1002', '2025-04-01', 500.00, 'Cliente XYZ Ltda', '22333444000155'),
+  ('f1000000-0000-0000-0000-000000000003', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'NF-1003', '2025-04-01', 800.00, 'Cliente ABC ME', '55666777000188');
+
+-- O recebimento: um credito unico no Cora que quita as duas notas de "Cliente
+-- XYZ" de uma vez -- exatamente o caso de PIX agrupado que a usuaria descreveu.
+insert into public.transactions
+  (id, company_id, bank_account_id, booking_date, competence_date, amount, status, description)
+values
+  ('f2000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1a1a1a1-0000-0000-0000-000000000001', '2025-04-20', '2025-04-20', 1500.00, 'realizado', 'PIX recebido Cliente XYZ');
+
+set role authenticated;
+
+-- settle_invoices recusa quando a soma das alocacoes passa do valor do credito.
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.settle_invoices('f2000000-0000-0000-0000-000000000001',
+    '[{"invoice_id": "f1000000-0000-0000-0000-000000000001", "amount": 1000.00},
+      {"invoice_id": "f1000000-0000-0000-0000-000000000002", "amount": 600.00}]'::jsonb)$q$,
+  'settle_invoices recusa quando a soma das alocacoes passa do valor do credito'
+); end $$;
+
+-- settle_invoices recusa quando UMA alocacao passa do saldo em aberto da propria nota.
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.settle_invoices('f2000000-0000-0000-0000-000000000001',
+    '[{"invoice_id": "f1000000-0000-0000-0000-000000000001", "amount": 1200.00}]'::jsonb)$q$,
+  'settle_invoices recusa alocacao acima do saldo em aberto da nota'
+); end $$;
+
+-- cliente_leitura nao pode dar baixa (RLS de invoice_settlements exige assistente+).
+do $$ begin perform pg_temp.expect_denied(
+  '33333333-3333-3333-3333-333333333333',
+  $q$select public.settle_invoices('f2000000-0000-0000-0000-000000000001',
+    '[{"invoice_id": "f1000000-0000-0000-0000-000000000001", "amount": 1000.00}]'::jsonb)$q$,
+  'cliente_leitura nao consegue chamar settle_invoices'
+); end $$;
+
+-- Baixa valida: um credito quita as duas notas do mesmo cliente de uma vez.
+do $$
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.settle_invoices('f2000000-0000-0000-0000-000000000001',
+      '[{"invoice_id": "f1000000-0000-0000-0000-000000000001", "amount": 1000.00},
+        {"invoice_id": "f1000000-0000-0000-0000-000000000002", "amount": 500.00}]'::jsonb)$q$);
+
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select status::text from public.invoices where id = 'f1000000-0000-0000-0000-000000000001'$q$) = 'recebida',
+    'settle_invoices quita a primeira nota do PIX agrupado'
+  );
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select status::text from public.invoices where id = 'f1000000-0000-0000-0000-000000000002'$q$) = 'recebida',
+    'settle_invoices quita a segunda nota do mesmo PIX agrupado'
+  );
+  perform pg_temp.assert(
+    pg_temp.count_as('22222222-2222-2222-2222-222222222222',
+      $q$select 1 from public.invoice_settlements where transaction_id = 'f2000000-0000-0000-0000-000000000001'$q$) = 2,
+    'settle_invoices grava as duas alocacoes do mesmo lancamento'
+  );
+end $$;
+
+-- Recebimento parcial (retencao de imposto): um credito menor que a nota.
+-- Insercao via run_as (nao um INSERT cru): a sessao ja esta sob `set role
+-- authenticated` neste ponto do arquivo, entao um INSERT direto ficaria sem
+-- jwt claim (auth.uid() nulo) e cairia na policy de RLS -- mesmo raciocinio
+-- ja documentado na fixture de matching_rules mais acima no arquivo.
+do $$
+begin
+  perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+    $q$insert into public.transactions
+        (id, company_id, bank_account_id, booking_date, competence_date, amount, status, description)
+      values
+        ('f2000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1a1a1a1-0000-0000-0000-000000000001', '2025-04-21', '2025-04-21', 300.00, 'realizado', 'PIX recebido Cliente ABC (com retencao)')$q$);
+end $$;
+
+do $$
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.settle_invoices('f2000000-0000-0000-0000-000000000002',
+      '[{"invoice_id": "f1000000-0000-0000-0000-000000000003", "amount": 300.00}]'::jsonb)$q$);
+
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select status::text from public.invoices where id = 'f1000000-0000-0000-0000-000000000003'$q$) = 'recebida_parcial',
+    'baixa parcial deixa a nota como recebida_parcial'
+  );
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select outstanding_amount::text from public.v_invoice_balances where invoice_id = 'f1000000-0000-0000-0000-000000000003'$q$)::numeric = 500.00,
+    'v_invoice_balances calcula o saldo em aberto certo depois da baixa parcial'
+  );
+end $$;
+
+-- unsettle_invoice desfaz uma baixa e recalcula o status.
+do $$
+declare v_settlement_id uuid;
+begin
+  v_settlement_id := pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select id::text from public.invoice_settlements where invoice_id = 'f1000000-0000-0000-0000-000000000003'$q$)::uuid;
+
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    format($q$select public.unsettle_invoice(%L)$q$, v_settlement_id));
+
+  perform pg_temp.assert(
+    pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+      $q$select status::text from public.invoices where id = 'f1000000-0000-0000-0000-000000000003'$q$) = 'aberta',
+    'unsettle_invoice devolve a nota para aberta quando desfaz a unica baixa'
+  );
+  perform pg_temp.assert(
+    pg_temp.count_as('22222222-2222-2222-2222-222222222222',
+      $q$select 1 from public.invoice_settlements where id = 'f1000000-0000-0000-0000-000000000003'$q$) = 0,
+    'unsettle_invoice apaga a linha de baixa'
+  );
+end $$;
+
+-- Trava de mes fechado: fecha maio e tenta dar baixa num credito de maio.
+do $$
+begin
+  perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+    $q$insert into public.invoices (id, company_id, number, issued_on, amount, client_name, client_tax_id)
+      values ('f1000000-0000-0000-0000-000000000004', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'NF-1004', '2025-05-01', 200.00, 'Cliente ABC ME', '55666777000188')$q$);
+  perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+    $q$insert into public.transactions
+        (id, company_id, bank_account_id, booking_date, competence_date, amount, status, description)
+      values
+        ('f2000000-0000-0000-0000-000000000003', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1a1a1a1-0000-0000-0000-000000000001', '2025-05-10', '2025-05-10', 200.00, 'realizado', 'PIX de maio, mes vai fechar')$q$);
+
+  perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+    $q$select public.close_month('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2025-05-01')$q$);
+end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.settle_invoices('f2000000-0000-0000-0000-000000000003',
+    '[{"invoice_id": "f1000000-0000-0000-0000-000000000004", "amount": 200.00}]'::jsonb)$q$,
+  'settle_invoices recusa dar baixa em credito de mes fechado'
+); end $$;
+
+reset role;
+
+\echo ''
 \echo '== Trilha de auditoria =='
 -- A pergunta que a planilha nunca respondeu: quem mudou este valor, quando, e de
 -- quanto para quanto. O assistente corrige um lancamento de abril (mes aberto).

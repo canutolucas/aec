@@ -330,6 +330,147 @@ export interface Database {
           },
         ];
       };
+      invoice_settlements: {
+        Row: {
+          id: string;
+          company_id: string;
+          invoice_id: string;
+          transaction_id: string;
+          amount: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id: string;
+          invoice_id: string;
+          transaction_id: string;
+          amount: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string;
+          invoice_id?: string;
+          transaction_id?: string;
+          amount?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invoice_settlements_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "invoice_settlements_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "invoice_settlements_invoice_fk";
+            columns: ["invoice_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "invoice_settlements_transaction_id_fkey";
+            columns: ["transaction_id"];
+            isOneToOne: false;
+            referencedRelation: "transactions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      invoices: {
+        Row: {
+          id: string;
+          company_id: string;
+          number: string;
+          series: string | null;
+          verification_code: string | null;
+          issued_on: string;
+          due_on: string | null;
+          amount: string;
+          withheld_amount: string;
+          counterparty_id: string | null;
+          client_name: string;
+          client_tax_id: string | null;
+          status: "aberta" | "recebida_parcial" | "recebida" | "cancelada";
+          source_file_name: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id: string;
+          number: string;
+          series?: string | null;
+          verification_code?: string | null;
+          issued_on: string;
+          due_on?: string | null;
+          amount: string;
+          withheld_amount?: string;
+          counterparty_id?: string | null;
+          client_name: string;
+          client_tax_id?: string | null;
+          status?: "aberta" | "recebida_parcial" | "recebida" | "cancelada";
+          source_file_name?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string;
+          number?: string;
+          series?: string | null;
+          verification_code?: string | null;
+          issued_on?: string;
+          due_on?: string | null;
+          amount?: string;
+          withheld_amount?: string;
+          counterparty_id?: string | null;
+          client_name?: string;
+          client_tax_id?: string | null;
+          status?: "aberta" | "recebida_parcial" | "recebida" | "cancelada";
+          source_file_name?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invoices_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "invoices_counterparty_fk";
+            columns: ["counterparty_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "counterparties";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "invoices_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       matching_rules: {
         Row: {
           id: string;
@@ -1043,6 +1184,25 @@ export interface Database {
         };
         Relationships: [];
       };
+      v_invoice_balances: {
+        Row: {
+          invoice_id: string | null;
+          company_id: string | null;
+          number: string | null;
+          series: string | null;
+          issued_on: string | null;
+          due_on: string | null;
+          amount: string | null;
+          withheld_amount: string | null;
+          client_name: string | null;
+          client_tax_id: string | null;
+          counterparty_id: string | null;
+          status: "aberta" | "recebida_parcial" | "recebida" | "cancelada" | null;
+          received_amount: string | null;
+          outstanding_amount: string | null;
+        };
+        Relationships: [];
+      };
       v_monthly_category_summary: {
         Row: {
           company_id: string | null;
@@ -1104,6 +1264,10 @@ export interface Database {
         Args: { p_company_id: string; p_period: string; p_reason: string };
         Returns: Database["public"]["Tables"]["monthly_closings"]["Row"];
       };
+      settle_invoices: {
+        Args: { p_transaction_id: string; p_allocations: Json };
+        Returns: Database["public"]["Tables"]["invoice_settlements"]["Row"][];
+      };
       settle_transaction: {
         Args: {
           p_transaction_id: string;
@@ -1116,10 +1280,15 @@ export interface Database {
         Args: { p_line_id: string };
         Returns: undefined;
       };
+      unsettle_invoice: {
+        Args: { p_settlement_id: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       bank_account_kind: "corrente" | "poupanca" | "aplicacao" | "cartao_credito" | "caixa";
       category_kind: "entrada" | "saida" | "ambos";
+      invoice_status: "aberta" | "recebida_parcial" | "recebida" | "cancelada";
       member_role: "cliente_leitura" | "assistente" | "contador" | "owner";
       payment_method:
         | "pix"
