@@ -399,10 +399,10 @@ export function ReconciliationClient({
           <div className="grid gap-4 p-4 sm:grid-cols-3">
             <div>
               <p className="text-muted-foreground text-xs">
-                Saldo do extrato em {balanceCheck.statementBalanceDate}
+                Saldo do extrato em {balanceCheck.declaredDate}
               </p>
               <p className="font-mono text-lg font-semibold tabular-nums">
-                {formatBRL(balanceCheck.statementBalance)}
+                {formatBRL(balanceCheck.declaredBalance)}
               </p>
             </div>
             <div>

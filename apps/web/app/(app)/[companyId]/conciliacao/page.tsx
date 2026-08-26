@@ -6,7 +6,7 @@ import {
   type StatementLine,
   type Transaction,
 } from "@aec/db";
-import { balanceOn, fromDb } from "@aec/domain";
+import { type BalanceCheck as BalanceCheckResult, checkBalance, fromDb } from "@aec/domain";
 
 import { requireCompany } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
@@ -16,13 +16,9 @@ import { ReconciliationClient } from "./conciliacao-client";
 
 export const metadata = { title: "Conciliacao — Controle Bancario" };
 
-export interface BalanceCheck {
-  readonly bankAccountId: string;
+/** checkBalance's own result, plus the account name the screen displays it under. */
+export interface BalanceCheck extends BalanceCheckResult {
   readonly accountName: string;
-  readonly statementBalance: number;
-  readonly statementBalanceDate: string;
-  readonly computedBalance: number;
-  readonly diff: number;
 }
 
 export default async function ReconciliationPage({
@@ -150,26 +146,16 @@ export default async function ReconciliationPage({
     const declared = latestImportByAccount.get(account.id);
     if (!declared) return [];
 
-    const computed = balanceOn(
+    const result = checkBalance(
       {
         openingBalance: fromDb(account.opening_balance),
         openingBalanceDate: account.opening_balance_date,
       },
       entriesByAccount.get(account.id) ?? [],
-      declared.date,
+      { bankAccountId: account.id, balance: fromDb(declared.balance), date: declared.date },
     );
-    const statementBalance = fromDb(declared.balance);
 
-    return [
-      {
-        bankAccountId: account.id,
-        accountName: account.name,
-        statementBalance,
-        statementBalanceDate: declared.date,
-        computedBalance: computed,
-        diff: computed - statementBalance,
-      },
-    ];
+    return [{ ...result, accountName: account.name }];
   });
 
   return (

@@ -70,6 +70,49 @@ export function balanceOn(
   return opening.openingBalance + sum(movement.map((entry) => entry.amount));
 }
 
+/** A closing balance the bank itself declared, as of a specific date. */
+export interface DeclaredBalance {
+  readonly bankAccountId: string;
+  readonly balance: Cents;
+  readonly date: IsoDate;
+}
+
+export interface BalanceCheck {
+  readonly bankAccountId: string;
+  readonly declaredBalance: Cents;
+  readonly declaredDate: IsoDate;
+  readonly computedBalance: Cents;
+  /** computedBalance - declaredBalance. Zero means the system's own math agrees with the bank. */
+  readonly diff: Cents;
+}
+
+/**
+ * Proves — or disproves — that the system's own ledger agrees with what the
+ * bank's statement declared as of a given date.
+ *
+ * This is the reconciliation screen's balance-proof panel: importing a
+ * statement and confirming a few pairings feels like progress, but it's
+ * only proof the month closes clean when the running total matches the
+ * bank's own number. `diff` is computed - declared on purpose (not the
+ * other way around) so a positive diff always reads as "the system thinks
+ * there's more money than the bank does" — a system that's missing an
+ * outflow, or has an inflow it shouldn't.
+ */
+export function checkBalance(
+  opening: AccountOpening,
+  entries: readonly BalanceEntry[],
+  declared: DeclaredBalance,
+): BalanceCheck {
+  const computedBalance = balanceOn(opening, entries, declared.date);
+  return {
+    bankAccountId: declared.bankAccountId,
+    declaredBalance: declared.balance,
+    declaredDate: declared.date,
+    computedBalance,
+    diff: computedBalance - declared.balance,
+  };
+}
+
 /** Balance considering all reported movement, with no date cutoff. */
 export function currentBalance(
   opening: AccountOpening,

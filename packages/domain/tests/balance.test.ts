@@ -4,6 +4,7 @@ import {
   type AccountOpening,
   type BalanceEntry,
   balanceOn,
+  checkBalance,
   consolidate,
   currentBalance,
   dailyBalances,
@@ -43,6 +44,53 @@ describe("balance on a date", () => {
 
   it("returns zero before the opening balance date", () => {
     expect(balanceOn(account, movement, "2024-12-31")).toBe(0);
+  });
+});
+
+describe("checking a declared balance against the system's own ledger", () => {
+  const movement = [entry("2025-03-05", "2500.00"), entry("2025-03-10", "-1800.00")];
+
+  it("reports zero diff when the bank's number and the system's agree", () => {
+    const result = checkBalance(account, movement, {
+      bankAccountId: "acc-1",
+      balance: fromDb("10700.00"),
+      date: "2025-03-31",
+    });
+    expect(result.diff).toBe(0);
+    expect(result.computedBalance).toBe(fromDb("10700.00"));
+    expect(result.declaredBalance).toBe(fromDb("10700.00"));
+    expect(result.declaredDate).toBe("2025-03-31");
+    expect(result.bankAccountId).toBe("acc-1");
+  });
+
+  it("diff is computed minus declared, so a positive diff means the system sees more money than the bank does", () => {
+    // The system's ledger is missing the -1800 outflow — it thinks the
+    // balance is 1800 higher than the bank's own number.
+    const result = checkBalance(account, [movement[0]!], {
+      bankAccountId: "acc-1",
+      balance: fromDb("10700.00"),
+      date: "2025-03-31",
+    });
+    expect(toDb(result.diff)).toBe("1800.00");
+  });
+
+  it("a missing inflow makes the system's balance look lower than the bank's", () => {
+    const result = checkBalance(account, [movement[1]!], {
+      bankAccountId: "acc-1",
+      balance: fromDb("10700.00"),
+      date: "2025-03-31",
+    });
+    expect(toDb(result.diff)).toBe("-2500.00");
+  });
+
+  it("checks as of the declared date, ignoring movement that comes after it", () => {
+    const withLaterMovement = [...movement, entry("2025-04-02", "-700.00")];
+    const result = checkBalance(account, withLaterMovement, {
+      bankAccountId: "acc-1",
+      balance: fromDb("10700.00"),
+      date: "2025-03-31",
+    });
+    expect(result.diff).toBe(0);
   });
 });
 
