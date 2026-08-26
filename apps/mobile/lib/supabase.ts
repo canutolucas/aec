@@ -1,6 +1,7 @@
 import type { Database } from "@aec/db";
 import { createClient } from "@supabase/supabase-js";
-import * as SecureStore from "expo-secure-store";
+
+import { largeSecureStore } from "./large-secure-store";
 
 function requireEnv(name: "EXPO_PUBLIC_SUPABASE_URL" | "EXPO_PUBLIC_SUPABASE_ANON_KEY") {
   const value = process.env[name];
@@ -13,11 +14,12 @@ export const supabase = createClient<Database>(
   requireEnv("EXPO_PUBLIC_SUPABASE_ANON_KEY"),
   {
     auth: {
-      storage: {
-        getItem: (key) => SecureStore.getItemAsync(key),
-        setItem: (key, value) => SecureStore.setItemAsync(key, value),
-        removeItem: (key) => SecureStore.deleteItemAsync(key),
-      },
+      // Plain SecureStore rejects (or on some Android builds silently
+      // truncates) values above ~2KB — easy for a Supabase session to
+      // exceed. `largeSecureStore` transparently splits/reunites larger
+      // values across sibling keys; see its own comment for the failure
+      // mode this avoids.
+      storage: largeSecureStore,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
