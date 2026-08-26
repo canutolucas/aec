@@ -178,11 +178,25 @@ export async function unsettleInvoiceAction(
   return OK;
 }
 
+export interface ReceivableAllocation {
+  readonly invoiceId: string;
+  readonly invoiceNumber: string;
+  readonly amount: Cents;
+}
+
 export interface AutoApplyReceivablesSuggestion {
   readonly transactionId: string;
   readonly transactionDescription: string;
   readonly creditAmount: Cents;
-  readonly invoiceIds: readonly string[];
+  /**
+   * Quanto vai para cada nota, ja calculado — o suficiente para chamar
+   * settleInvoicesAction direto, sem a pessoa precisar montar a alocacao na
+   * mao. Numa nota so (retencao ou o "exact" que ja foi aplicado sozinho),
+   * o credito inteiro vai pra ela; em 2+ notas (PIX agrupado), cada uma
+   * recebe o proprio saldo em aberto — e por isso a soma fecha com o
+   * credito.
+   */
+  readonly allocations: readonly ReceivableAllocation[];
   readonly reason: string;
 }
 
@@ -316,12 +330,39 @@ export async function autoApplyReceivables(input: {
   const suggested: AutoApplyReceivablesSuggestion[] = plan.suggested.flatMap((match) => {
     const credit = creditById.get(match.transactionId);
     if (!credit) return [];
+
+    const matchedInvoices = match.invoiceIds.flatMap((id) => {
+      const inv = openInvoices.find((candidate) => candidate.invoice_id === id);
+      return inv ? [inv] : [];
+    });
+    if (matchedInvoices.length !== match.invoiceIds.length) return [];
+
+    // Uma nota so: o credito inteiro vai pra ela (mesmo quando e menor que
+    // o saldo em aberto — e exatamente o caso de retencao). Duas ou mais
+    // (agrupado): cada uma recebe o proprio saldo em aberto, porque foi
+    // assim que matchReceivables achou a combinacao (a soma dos saldos
+    // bate exatamente com o credito).
+    const allocations: ReceivableAllocation[] =
+      matchedInvoices.length === 1
+        ? [
+            {
+              invoiceId: matchedInvoices[0]!.invoice_id!,
+              invoiceNumber: matchedInvoices[0]!.number!,
+              amount: fromDb(credit.amount),
+            },
+          ]
+        : matchedInvoices.map((inv) => ({
+            invoiceId: inv.invoice_id!,
+            invoiceNumber: inv.number!,
+            amount: fromDb(inv.outstanding_amount),
+          }));
+
     return [
       {
         transactionId: credit.id,
         transactionDescription: credit.description,
         creditAmount: fromDb(credit.amount),
-        invoiceIds: match.invoiceIds,
+        allocations,
         reason: match.reason,
       },
     ];

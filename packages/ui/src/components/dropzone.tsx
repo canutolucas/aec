@@ -6,23 +6,26 @@ import { cn } from "../lib/cn";
 
 /**
  * Arrastar-e-soltar com clique como alternativa — para o fluxo simples, onde
- * subir o extrato e a unica acao da tela e precisa ser obvia sem exigir
+ * subir o arquivo e a unica acao da tela e precisa ser obvia sem exigir
  * nenhuma instrucao.
  *
- * So recebe o arquivo e avisa via onFile: quem usa isto decide o que fazer
- * com ele (ler, importar, etc.) — este componente nao sabe nada sobre
- * extrato bancario.
+ * So recebe o(s) arquivo(s) e avisa via onFiles: quem usa isto decide o que
+ * fazer com eles (ler, importar, etc.) — este componente nao sabe nada
+ * sobre extrato bancario ou nota fiscal.
  */
 export function Dropzone({
   accept,
   disabled = false,
-  onFile,
-  label = "Arraste o extrato aqui, ou clique para escolher o arquivo",
+  multiple = false,
+  onFiles,
+  label = "Arraste o arquivo aqui, ou clique para escolher",
   hint,
 }: {
   accept: string;
   disabled?: boolean;
-  onFile: (file: File) => void;
+  /** Permite escolher/arrastar mais de um arquivo de uma vez (ex.: um XML por nota). */
+  multiple?: boolean;
+  onFiles: (files: readonly File[]) => void;
   label?: string;
   hint?: string;
 }) {
@@ -37,8 +40,8 @@ export function Dropzone({
     event.preventDefault();
     setIsDragging(false);
     if (disabled) return;
-    const file = event.dataTransfer.files?.[0];
-    if (file) onFile(file);
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (files.length > 0) onFiles(multiple ? files : [files[0]!]);
   }
 
   return (
@@ -77,12 +80,13 @@ export function Dropzone({
         // um registrado) com extensoes reais degrada o filtro de arquivo
         // inteiro no Safari/iOS.
         accept={accept}
+        multiple={multiple}
         disabled={disabled}
         onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) onFile(file);
-          // Limpa o valor: sem isso, escolher o MESMO arquivo de novo depois
-          // de um erro nao dispara onChange na segunda vez.
+          const files = Array.from(event.target.files ?? []);
+          if (files.length > 0) onFiles(files);
+          // Limpa o valor: sem isso, escolher o(s) MESMO(S) arquivo(s) de
+          // novo depois de um erro nao dispara onChange na segunda vez.
           event.target.value = "";
         }}
         className="hidden"

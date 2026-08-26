@@ -12,30 +12,38 @@ const NAV = [
   { key: "lancamentos", label: "Lancamentos", href: (id: string) => routes.transactions(id) },
   { key: "contas", label: "Contas", href: routes.accounts },
   { key: "conciliacao", label: "Conciliacao", href: routes.reconciliation },
+  { key: "faturamento", label: "Faturamento", href: routes.invoices },
+  { key: "recebimentos", label: "Recebimentos", href: routes.receivables },
   { key: "relatorios", label: "Relatorios", href: routes.reports },
   { key: "cadastros", label: "Cadastros", href: routes.registries },
   { key: "equipe", label: "Equipe", href: routes.team },
 ] as const;
 
 /**
- * No modo simples so existe uma pagina (/inicio) — os outros 6 itens levam
- * a telas que requireAdvancedAccess() ja redireciona de volta pra ca, entao
- * mostra-los aqui so criaria um link que bate e volta.
+ * No modo simples so existem tres paginas: Inicio, e Faturamento/
+ * Recebimentos — essas duas ficam de fora de requireAdvancedAccess de
+ * proposito (equipe/faturamento/recebimentos/page.tsx usam requireCompany),
+ * porque sao tarefa do dia a dia de quem opera o sistema no modo simples,
+ * nao um recurso avancado. Os outros 4 itens levam a telas que
+ * requireAdvancedAccess() ja redireciona de volta pra ca, entao mostra-los
+ * aqui so criaria um link que bate e volta.
  *
- * Equipe e a excecao: e a unica tela que desliga o modo simples
- * (alternarModoSimples), e por isso o proprio equipe/page.tsx NAO usa
+ * Equipe e outra excecao: e a unica tela que desliga o modo simples
+ * (alternarModoSimples), e por isso o proprio equipe/page.tsx tambem NAO usa
  * requireAdvancedAccess — sem ela visivel aqui, um owner que ligasse o modo
  * simples em si mesmo ficaria sem nenhum link de volta, so um URL digitado
  * a mao. So aparece para quem tem papel de owner (quem realmente pode usar
  * o controle la dentro).
  */
 function simpleNav(role: Parameters<typeof hasRole>[0]) {
+  const base = [
+    { key: "inicio", label: "Inicio", href: routes.home },
+    { key: "faturamento", label: "Faturamento", href: routes.invoices },
+    { key: "recebimentos", label: "Recebimentos", href: routes.receivables },
+  ] as const;
   return hasRole(role, "owner")
-    ? ([
-        { key: "inicio", label: "Inicio", href: routes.home },
-        { key: "equipe", label: "Equipe", href: routes.team },
-      ] as const)
-    : ([{ key: "inicio", label: "Inicio", href: routes.home }] as const);
+    ? ([...base, { key: "equipe", label: "Equipe", href: routes.team }] as const)
+    : base;
 }
 
 export default async function CompanyLayout({

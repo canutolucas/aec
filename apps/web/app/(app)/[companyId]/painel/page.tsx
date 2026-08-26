@@ -24,7 +24,7 @@ export default async function PainelPage({ params }: { params: Promise<{ company
 
   const supabase = await createServerSupabase();
 
-  const [saldosResult, previstosResult, doMesResult] = await Promise.all([
+  const [saldosResult, previstosResult, doMesResult, notasResult] = await Promise.all([
     supabase.from("v_account_balances").select("*").eq("company_id", companyId).order("name"),
     // Inclui previstos vencidos (anteriores a hoje): eles continuam para pagar e
     // a projecao os traz para o primeiro dia em vez de ignora-los.
@@ -42,15 +42,21 @@ export default async function PainelPage({ params }: { params: Promise<{ company
       .eq("status", "realizado")
       .gte("booking_date", inicioDoMes)
       .lte("booking_date", hoje),
+    supabase
+      .from("v_invoice_balances")
+      .select("outstanding_amount")
+      .eq("company_id", companyId)
+      .gt("outstanding_amount", 0),
   ]);
 
-  for (const result of [saldosResult, previstosResult, doMesResult]) {
+  for (const result of [saldosResult, previstosResult, doMesResult, notasResult]) {
     if (result.error) throw result.error;
   }
 
   const contas = (saldosResult.data ?? []) as AccountBalance[];
   const previstos = (previstosResult.data ?? []) as Transaction[];
   const doMes = (doMesResult.data ?? []) as Transaction[];
+  const aReceber = sum((notasResult.data ?? []).map((row) => fromDb(row.outstanding_amount)));
 
   const saldoAtual = sum(contas.map((conta) => fromDb(conta.current_balance)));
   const aConciliar = contas.reduce((total, conta) => total + Number(conta.unreconciled_count), 0);
@@ -99,11 +105,12 @@ export default async function PainelPage({ params }: { params: Promise<{ company
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Indicador titulo="Saldo hoje" valor={saldoAtual} />
         <Indicador titulo={`Entradas de ${formatMonth(inicioDoMes)}`} valor={entradasDoMes} />
         <Indicador titulo={`Saidas de ${formatMonth(inicioDoMes)}`} valor={saidasDoMes} />
         <Indicador titulo={`Projetado em ${HORIZONTE_DIAS} dias`} valor={projecao.finalBalance} />
+        <Indicador titulo="A receber (notas em aberto)" valor={aReceber} />
       </div>
 
       {projecao.firstNegativeDate && (

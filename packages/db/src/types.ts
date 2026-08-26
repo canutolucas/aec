@@ -46,6 +46,7 @@ export type ReconciliationStatus = Enums["reconciliation_status"];
 export type StatementSource = Enums["statement_source"];
 export type StatementLineStatus = Enums["statement_line_status"];
 export type PaymentMethod = Enums["payment_method"];
+export type InvoiceStatus = Enums["invoice_status"];
 
 export type Company = Tables["companies"]["Row"];
 export type Membership = Tables["memberships"]["Row"];
@@ -58,6 +59,8 @@ export type MonthlyClosing = Tables["monthly_closings"]["Row"];
 export type StatementImport = Tables["statement_imports"]["Row"];
 export type StatementLine = Tables["statement_lines"]["Row"];
 export type MatchingRule = Tables["matching_rules"]["Row"];
+export type Invoice = Tables["invoices"]["Row"];
+export type InvoiceSettlement = Tables["invoice_settlements"]["Row"];
 
 export type Transaction = Omit<Tables["transactions"]["Row"], "direction" | "is_transfer"> & {
   direction: TransactionDirection;
@@ -80,6 +83,24 @@ export interface AccountBalance {
   projected_balance: string;
   overdue_amount: string;
   unreconciled_count: number;
+}
+
+/** Row from the v_invoice_balances view. See the file header for why this stays hand-written. */
+export interface InvoiceBalance {
+  invoice_id: string;
+  company_id: string;
+  number: string;
+  series: string | null;
+  issued_on: string;
+  due_on: string | null;
+  amount: string;
+  withheld_amount: string;
+  client_name: string;
+  client_tax_id: string | null;
+  counterparty_id: string | null;
+  status: InvoiceStatus;
+  received_amount: string;
+  outstanding_amount: string;
 }
 
 /** Role ranking, matching app.role_rank in the database. */
@@ -133,4 +154,11 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   dinheiro: "Dinheiro",
   cheque: "Cheque",
   outro: "Outro",
+};
+
+export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
+  aberta: "Em aberto",
+  recebida_parcial: "Recebida parcialmente",
+  recebida: "Recebida",
+  cancelada: "Cancelada",
 };

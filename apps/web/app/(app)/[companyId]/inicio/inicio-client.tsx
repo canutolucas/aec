@@ -14,8 +14,11 @@
 import type { Category } from "@aec/db";
 import { directionOf, formatBRL, fromDb, suggestRuleText } from "@aec/domain";
 import type { CanonicalStatement } from "@aec/statements";
-import { Alert, Button, Card, CardHeader, Dropzone, Field, Select } from "@aec/ui";
+import { Alert, Button, Card, CardHeader, Dropzone, Field, LinkButton, Select } from "@aec/ui";
 import { useState, useTransition } from "react";
+
+import { autoApplyReceivables } from "@/lib/db/faturamento";
+import { routes } from "@/lib/ui/routes";
 
 import {
   type AutoApplyException,
@@ -46,6 +49,12 @@ interface SessionState {
   readonly suggested: readonly AutoApplySuggestion[];
   readonly uncategorized: readonly AutoApplyException[];
   readonly failed: readonly AutoApplyFailure[];
+  /**
+   * Recebimentos de nota fiscal casados com este mesmo extrato. Null quando
+   * a checagem nao rodou ou falhou — nao bloqueia o resto do fluxo, e so um
+   * bonus em cima da conciliacao de extrato que ja funcionou.
+   */
+  readonly receivables: { readonly settled: number; readonly pending: number } | null;
 }
 
 export function InicioClient({
@@ -65,13 +74,17 @@ export function InicioClient({
   const [feedback, setFeedback] = useState<{ text: string; tone: "warn" | "error" } | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function applySession(result: AutoApplyResult) {
+  function applySession(
+    result: AutoApplyResult,
+    receivables?: { settled: number; pending: number } | null,
+  ) {
     setSession((prev) => ({
       reconciled: (prev?.reconciled ?? 0) + (result.reconciled ?? 0),
       created: (prev?.created ?? 0) + (result.created ?? 0),
       suggested: result.exceptions?.suggested ?? [],
       uncategorized: result.exceptions?.uncategorized ?? [],
       failed: result.exceptions?.failed ?? [],
+      receivables: receivables !== undefined ? receivables : (prev?.receivables ?? null),
     }));
     setPhase("done");
   }
@@ -107,7 +120,19 @@ export function InicioClient({
         return;
       }
 
-      applySession(applied);
+      // Bonus depois da conciliacao de extrato: tenta casar os mesmos
+      // creditos com notas fiscais em aberto. Uma falha aqui nao desfaz nem
+      // bloqueia o que ja funcionou acima — so fica sem o bloco de
+      // recebimentos na tela de resultado.
+      const receivablesResult = await autoApplyReceivables({ companyId, bankAccountId: accountId });
+      const receivables = receivablesResult.ok
+        ? {
+            settled: receivablesResult.settled ?? 0,
+            pending: receivablesResult.suggested?.length ?? 0,
+          }
+        : null;
+
+      applySession(applied, receivables);
     });
   }
 
@@ -271,7 +296,10 @@ export function InicioClient({
               <Dropzone
                 accept=".ofx,.qfx,.csv,.pdf"
                 disabled={isPending || !accountId}
-                onFile={(file) => void handleFile(file)}
+                onFiles={(files) => {
+                  const file = files[0];
+                  if (file) void handleFile(file);
+                }}
                 hint="OFX, QFX, CSV ou PDF do Cora"
               />
             ) : (
@@ -328,6 +356,31 @@ export function InicioClient({
               />
             </div>
           </Card>
+
+          {session.receivables && (
+            <Card>
+              <CardHeader title="Recebimentos de notas fiscais" />
+              <div className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
+                <p className="text-sm">
+                  <span className="font-semibold">{session.receivables.settled}</span>{" "}
+                  recebimento(s) confirmado(s) automaticamente
+                  {session.receivables.pending > 0 && (
+                    <>
+                      {" "}
+                      · <span className="font-semibold">{session.receivables.pending}</span>{" "}
+                      aguardando confirmacao
+                    </>
+                  )}
+                  .
+                </p>
+                {session.receivables.pending > 0 && (
+                  <LinkButton href={routes.receivables(companyId)} size="sm">
+                    Ver em Recebimentos
+                  </LinkButton>
+                )}
+              </div>
+            </Card>
+          )}
 
           {allClear ? (
             <Alert tone="success">Tudo conciliado. O mes esta pronto.</Alert>
