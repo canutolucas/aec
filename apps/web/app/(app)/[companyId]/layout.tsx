@@ -1,4 +1,4 @@
-import { ROLE_LABELS } from "@aec/db";
+import { hasRole, ROLE_LABELS } from "@aec/db";
 import { Logo } from "@aec/ui";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -17,10 +17,26 @@ const NAV = [
   { key: "equipe", label: "Equipe", href: routes.team },
 ] as const;
 
-// No modo simples so existe uma pagina (/inicio) — os outros 7 itens levam
-// a telas que requireAdvancedAccess() ja redireciona de volta pra ca, entao
-// mostra-los aqui so criaria um link que bate e volta.
-const SIMPLE_NAV = [{ key: "inicio", label: "Inicio", href: routes.home }] as const;
+/**
+ * No modo simples so existe uma pagina (/inicio) — os outros 6 itens levam
+ * a telas que requireAdvancedAccess() ja redireciona de volta pra ca, entao
+ * mostra-los aqui so criaria um link que bate e volta.
+ *
+ * Equipe e a excecao: e a unica tela que desliga o modo simples
+ * (alternarModoSimples), e por isso o proprio equipe/page.tsx NAO usa
+ * requireAdvancedAccess — sem ela visivel aqui, um owner que ligasse o modo
+ * simples em si mesmo ficaria sem nenhum link de volta, so um URL digitado
+ * a mao. So aparece para quem tem papel de owner (quem realmente pode usar
+ * o controle la dentro).
+ */
+function simpleNav(role: Parameters<typeof hasRole>[0]) {
+  return hasRole(role, "owner")
+    ? ([
+        { key: "inicio", label: "Inicio", href: routes.home },
+        { key: "equipe", label: "Equipe", href: routes.team },
+      ] as const)
+    : ([{ key: "inicio", label: "Inicio", href: routes.home }] as const);
+}
 
 export default async function CompanyLayout({
   children,
@@ -73,7 +89,7 @@ export default async function CompanyLayout({
 
         <nav className="mx-auto max-w-7xl px-4">
           <ul className="flex gap-1">
-            {(session.simpleMode ? SIMPLE_NAV : NAV).map((item) => (
+            {(session.simpleMode ? simpleNav(session.role) : NAV).map((item) => (
               <li key={item.key}>
                 <Link
                   href={item.href(companyId)}
