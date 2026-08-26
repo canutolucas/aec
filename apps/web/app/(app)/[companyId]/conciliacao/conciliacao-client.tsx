@@ -413,7 +413,17 @@ export function ReconciliationClient({
           >
             <input
               type="file"
-              accept=".ofx,.qfx,.csv,.pdf,text/csv,application/x-ofx,application/pdf"
+              // Extension-only, deliberately: `application/x-ofx` isn't a
+              // real registered MIME type (there's no standard one for
+              // OFX), and mixing it into `accept` alongside real ones is a
+              // known WebKit/iOS bug — Safari on iPhone/iPad doesn't just
+              // ignore the type it can't recognize, it degrades the whole
+              // input's file-type filtering, greying out CSV too and
+              // leaving only PDF (a type iOS is certain about) selectable.
+              // Extensions alone match reliably everywhere, and the file is
+              // identified by name/content after selection regardless (see
+              // readFile below), never by the browser-reported MIME type.
+              accept=".ofx,.qfx,.csv,.pdf"
               disabled={!canEdit || isPending}
               onChange={(event) => void readFile(event.target.files?.[0])}
               className="border-input bg-card block w-full rounded-md border px-3 py-2 text-sm"
