@@ -17,6 +17,11 @@ const NAV = [
   { key: "equipe", label: "Equipe", href: routes.team },
 ] as const;
 
+// No modo simples so existe uma pagina (/inicio) — os outros 7 itens levam
+// a telas que requireAdvancedAccess() ja redireciona de volta pra ca, entao
+// mostra-los aqui so criaria um link que bate e volta.
+const SIMPLE_NAV = [{ key: "inicio", label: "Inicio", href: routes.home }] as const;
+
 export default async function CompanyLayout({
   children,
   params,
@@ -68,7 +73,7 @@ export default async function CompanyLayout({
 
         <nav className="mx-auto max-w-7xl px-4">
           <ul className="flex gap-1">
-            {NAV.map((item) => (
+            {(session.simpleMode ? SIMPLE_NAV : NAV).map((item) => (
               <li key={item.key}>
                 <Link
                   href={item.href(companyId)}

@@ -11,7 +11,7 @@ import {
   todayInBrazil,
 } from "@aec/domain";
 
-import { requireCompany } from "@/lib/db/session";
+import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 
 import { FiltroPeriodo } from "./filtro-periodo";
@@ -28,7 +28,7 @@ export default async function RelatoriosPage({
 }) {
   const { companyId } = await params;
   const filtros = await searchParams;
-  await requireCompany(companyId);
+  await requireAdvancedAccess(companyId);
 
   const hoje = todayInBrazil();
   // Um valor invalido na URL (digitado a mao, um bookmark velho) nao pode

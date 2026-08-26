@@ -6,7 +6,7 @@ import {
   listMatchingRules,
 } from "@aec/db";
 
-import { requireCompany } from "@/lib/db/session";
+import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 
 import { CadastrosClient } from "./cadastros-client";
@@ -19,7 +19,7 @@ export default async function CadastrosPage({
   params: Promise<{ companyId: string }>;
 }) {
   const { companyId } = await params;
-  const session = await requireCompany(companyId);
+  const session = await requireAdvancedAccess(companyId);
   const supabase = await createServerSupabase();
 
   // Shared with the mobile app (packages/db) instead of repeating the same

@@ -8,7 +8,7 @@ import {
 } from "@aec/db";
 import { type BalanceCheck as BalanceCheckResult, checkBalance, fromDb } from "@aec/domain";
 
-import { requireCompany } from "@/lib/db/session";
+import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 import { Alert } from "@/lib/ui/components";
 
@@ -27,7 +27,7 @@ export default async function ReconciliationPage({
   params: Promise<{ companyId: string }>;
 }) {
   const { companyId } = await params;
-  const session = await requireCompany(companyId);
+  const session = await requireAdvancedAccess(companyId);
   const supabase = await createServerSupabase();
 
   const [

@@ -8,5 +8,7 @@ export default async function Home() {
   const companies = await listCompanies();
 
   if (companies.length === 0) redirect(routes.companies);
-  redirect(routes.dashboard(companies[0]!.id));
+
+  const company = companies[0]!;
+  redirect(company.simpleMode ? routes.home(company.id) : routes.dashboard(company.id));
 }

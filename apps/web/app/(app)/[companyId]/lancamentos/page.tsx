@@ -8,7 +8,7 @@ import {
 import { endOfMonth, startOfMonth, todayInBrazil } from "@aec/domain";
 import { fromDb, sum } from "@aec/domain";
 
-import { requireCompany } from "@/lib/db/session";
+import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 import { Alert, Card, CardHeader, EmptyState, Money } from "@/lib/ui/components";
 import { formatMonth } from "@/lib/ui/format";
@@ -29,7 +29,7 @@ export default async function LancamentosPage({
 }) {
   const { companyId } = await params;
   const filtros = await searchParams;
-  const session = await requireCompany(companyId);
+  const session = await requireAdvancedAccess(companyId);
   const podeLancar = hasRole(session.role, "assistente");
 
   const hoje = todayInBrazil();

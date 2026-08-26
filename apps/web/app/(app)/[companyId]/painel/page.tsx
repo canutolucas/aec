@@ -4,7 +4,7 @@ import { fromDb, sum } from "@aec/domain";
 import { project } from "@aec/domain";
 import Link from "next/link";
 
-import { requireCompany } from "@/lib/db/session";
+import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 import { Alert, Card, CardHeader, EmptyState, LinkButton, Money } from "@/lib/ui/components";
 import { formatDate, formatMonth } from "@/lib/ui/format";
@@ -16,7 +16,7 @@ const HORIZONTE_DIAS = 30;
 
 export default async function PainelPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
-  await requireCompany(companyId);
+  await requireAdvancedAccess(companyId);
 
   const hoje = todayInBrazil();
   const inicioDoMes = startOfMonth(hoje);

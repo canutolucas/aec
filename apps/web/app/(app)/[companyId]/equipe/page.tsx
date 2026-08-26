@@ -1,6 +1,6 @@
 import { hasRole, type Membership, type Profile } from "@aec/db";
 
-import { requireCompany } from "@/lib/db/session";
+import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 
 import { EquipeClient } from "./equipe-client";
@@ -13,7 +13,7 @@ export interface MembershipWithProfile extends Membership {
 
 export default async function EquipePage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
-  const session = await requireCompany(companyId);
+  const session = await requireAdvancedAccess(companyId);
   const supabase = await createServerSupabase();
 
   const { data, error } = await supabase

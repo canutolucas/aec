@@ -1,6 +1,6 @@
 import { type AccountBalance, type BankAccount, hasRole } from "@aec/db";
 
-import { requireCompany } from "@/lib/db/session";
+import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 
 import { ContasClient } from "./contas-client";
@@ -9,7 +9,7 @@ export const metadata = { title: "Contas — Controle Bancario" };
 
 export default async function ContasPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
-  const session = await requireCompany(companyId);
+  const session = await requireAdvancedAccess(companyId);
   const podeEditar = hasRole(session.role, "contador");
 
   const supabase = await createServerSupabase();
