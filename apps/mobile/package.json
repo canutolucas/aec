@@ -1,0 +1,30 @@
+{
+  "name": "@aec/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aec/db": "workspace:*",
+    "@aec/domain": "workspace:*",
+    "@supabase/supabase-js": "^2.112.4",
+    "@tanstack/react-query": "^5.102.4",
+    "expo": "~54.0.37",
+    "expo-router": "~6.0.24",
+    "expo-secure-store": "~14.2.4",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "typescript": "^5.9.3"
+  }
+}

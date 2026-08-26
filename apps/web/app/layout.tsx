@@ -1,22 +1,8 @@
 import "./globals.css";
 
 import type { Metadata } from "next";
-import { Archivo, IBM_Plex_Mono } from "next/font/google";
 
 import { Providers } from "./providers";
-
-const archivo = Archivo({
-  subsets: ["latin"],
-  variable: "--font-archivo",
-  display: "swap",
-});
-
-const ibmPlexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-ibm-plex-mono",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "Controle Bancario",
@@ -25,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${archivo.variable} ${ibmPlexMono.variable}`}>
+    <html lang="pt-BR">
       <body className="bg-background text-foreground min-h-screen font-sans antialiased">
         <Providers>{children}</Providers>
       </body>

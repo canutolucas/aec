@@ -23,6 +23,8 @@ export type CategoryKind = "entrada" | "saida" | "ambos";
 export type TransactionStatus = "previsto" | "realizado";
 export type TransactionDirection = "entrada" | "saida";
 export type ReconciliationStatus = "nao_conciliado" | "conciliado" | "ignorado";
+export type StatementSource = "ofx" | "csv" | "manual" | "open_finance";
+export type StatementLineStatus = "pendente" | "conciliada" | "criada" | "ignorada";
 export type PaymentMethod =
   | "pix"
   | "ted"
@@ -132,6 +134,39 @@ export interface MonthlyClosing {
   locked_by: string | null;
   reopened_at: string | null;
   reopen_reason: string | null;
+}
+
+export interface StatementImport {
+  id: string;
+  company_id: string;
+  bank_account_id: string;
+  source: StatementSource;
+  file_name: string | null;
+  file_hash: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  statement_balance: string | null;
+  statement_balance_date: string | null;
+  line_count: number;
+  imported_by: string | null;
+  created_at: string;
+}
+
+export interface StatementLine {
+  id: string;
+  company_id: string;
+  import_id: string;
+  bank_account_id: string;
+  posted_at: string;
+  amount: string;
+  memo: string;
+  fitid: string | null;
+  dedup_key: string;
+  status: StatementLineStatus;
+  matched_transaction_id: string | null;
+  matched_at: string | null;
+  matched_by: string | null;
+  created_at: string;
 }
 
 /** Role ranking, matching app.role_rank in the database. */

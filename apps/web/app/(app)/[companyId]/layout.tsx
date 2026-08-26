@@ -10,6 +10,7 @@ const NAV = [
   { key: "painel", label: "Painel", href: routes.dashboard },
   { key: "lancamentos", label: "Lancamentos", href: (id: string) => routes.transactions(id) },
   { key: "contas", label: "Contas", href: routes.accounts },
+  { key: "conciliacao", label: "Conciliacao", href: routes.reconciliation },
 ] as const;
 
 export default async function CompanyLayout({

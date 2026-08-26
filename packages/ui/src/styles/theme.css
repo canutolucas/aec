@@ -66,6 +66,8 @@
 }
 
 :root {
+  --font-archivo: "Archivo", "Trebuchet MS", ui-sans-serif, system-ui, sans-serif;
+  --font-ibm-plex-mono: "IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace;
   --background: 48 15% 93.5%;
   --foreground: 204 40% 12%;
   --card: 48 20% 97%;
