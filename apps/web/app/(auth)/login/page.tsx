@@ -35,7 +35,7 @@ export default async function LoginPage({
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
       <Logo className="text-3xl" />
-      <h1 className="mt-4 text-xl font-semibold">Controle Bancario</h1>
+      <h1 className="text-primary mt-4 text-xl font-semibold">Controle Bancario</h1>
       <p className="text-muted-foreground mt-1 text-sm">
         Entradas e saidas das contas, conciliadas com o extrato do banco.
       </p>
