@@ -37,8 +37,20 @@ psql -v ON_ERROR_STOP=1 -q -d "$DB" -c "create extension if not exists pgcrypto;
 psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$ROOT/tests/sql/00_supabase_stub.sql"
 
 for migration in "$ROOT"/supabase/migrations/*.sql; do
-  psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$migration" 2>&1 \
-    | grep -v 'already exists, skipping' || true
+  # psql's own exit code is checked before any filtering — piping straight
+  # into `grep -v ... || true` would let a real migration error through
+  # silently, since `|| true` forces the whole pipeline to exit 0
+  # regardless of what psql did.
+  if ! output=$(psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$migration" 2>&1); then
+    echo "$output" >&2
+    echo "Migration failed: $migration" >&2
+    exit 1
+  fi
+  # `echo` always emits a line, even for an empty $output — most migrations
+  # print nothing at all, and without this guard every one of them would
+  # add a spurious blank line (grep -v doesn't drop it: an empty line
+  # doesn't contain "already exists, skipping" either).
+  [ -z "$output" ] || echo "$output" | grep -v 'already exists, skipping' || true
 done
 
 psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$ROOT/tests/sql/10_schema_test.sql" 2>&1 \
@@ -53,8 +65,12 @@ psql -q -c "create database ${DB}_seed;" postgres
 psql -v ON_ERROR_STOP=1 -q -d "${DB}_seed" -c "create extension if not exists pgcrypto;"
 psql -v ON_ERROR_STOP=1 -q -d "${DB}_seed" -f "$ROOT/tests/sql/00_supabase_stub.sql"
 for migration in "$ROOT"/supabase/migrations/*.sql; do
-  psql -v ON_ERROR_STOP=1 -q -d "${DB}_seed" -f "$migration" 2>&1 \
-    | grep -v 'already exists, skipping' || true
+  if ! output=$(psql -v ON_ERROR_STOP=1 -q -d "${DB}_seed" -f "$migration" 2>&1); then
+    echo "$output" >&2
+    echo "Migration failed: $migration" >&2
+    exit 1
+  fi
+  [ -z "$output" ] || echo "$output" | grep -v 'already exists, skipping' || true
 done
 psql -v ON_ERROR_STOP=1 -q -d "${DB}_seed" -f "$ROOT/supabase/seed.sql" > /dev/null
 psql -q -t -d "${DB}_seed" -c "

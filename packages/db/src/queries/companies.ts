@@ -13,9 +13,20 @@ export interface CompanyMembership extends Company {
  * own copy.
  */
 export async function listMyCompanies(client: DbClient): Promise<CompanyMembership[]> {
+  const { data: userData, error: userError } = await client.auth.getUser();
+  if (userError) throw new Error(userError.message);
+  if (!userData.user) return [];
+
+  // The user_id filter is not just an optimization: RLS on memberships only
+  // requires being a member of the SAME company, not owning the row — so
+  // without it, a company with an owner and an assistant returns one
+  // membership row per PERSON in the company, not one per company the
+  // caller belongs to. `.find()`-style lookups downstream would then risk
+  // resolving to a DIFFERENT member's role instead of the caller's own.
   const result = await client
     .from("memberships")
     .select("role, companies (*)")
+    .eq("user_id", userData.user.id)
     .order("created_at", { ascending: true });
 
   const rows = unwrap(result);

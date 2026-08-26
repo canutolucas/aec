@@ -36,8 +36,18 @@ psql -v ON_ERROR_STOP=1 -q -d "$DB" -c "create extension if not exists pgcrypto;
 psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$ROOT/tests/sql/00_supabase_stub.sql"
 
 for migration in "$ROOT"/supabase/migrations/*.sql; do
-  psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$migration" 2>&1 \
-    | grep -v 'already exists, skipping' || true
+  # psql's own exit code is checked directly, before any filtering — piping
+  # straight into `grep -v ... || true` would let a real migration error
+  # through silently: the `|| true` forces the pipeline to exit 0 no matter
+  # what psql did, so a syntax/constraint error would apply cleanly on
+  # paper while generate-types.mjs went on to introspect a database
+  # silently missing whatever that migration was supposed to add.
+  if ! output=$(psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$migration" 2>&1); then
+    echo "$output" >&2
+    echo "Migration failed: $migration" >&2
+    exit 1
+  fi
+  [ -z "$output" ] || echo "$output" | grep -v 'already exists, skipping' || true
 done
 
 echo ""

@@ -692,10 +692,36 @@ do $$ begin perform pg_temp.expect_denied(
   'cliente_leitura nao consegue chamar unreconcile_line'
 ); end $$;
 
+-- Uma linha conciliada com um lancamento de marco, para testar a trava de
+-- mes fechado em unreconcile_line logo abaixo — precisa existir ANTES de
+-- marco fechar, porque reconcile_line tambem escreve em transactions e
+-- seria recusado do mesmo jeito depois que o mes fechar.
+do $$
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$insert into public.statement_lines (id, company_id, import_id, bank_account_id, posted_at, amount, memo, dedup_key)
+       values ('11110000-0000-0000-0000-000000000008', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+               'e1e1e1e1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001',
+               '2025-03-06', 2500.00, 'Linha para testar unreconcile em mes fechado', '20250306-lock-undo')$q$);
+end $$;
+
+do $$
+declare v_transaction_id uuid;
+begin
+  v_transaction_id := pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select id::text from public.transactions where description = 'Honorarios marco'$q$)::uuid;
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    format($q$select public.reconcile_line('11110000-0000-0000-0000-000000000008', %L)$q$, v_transaction_id));
+end $$;
+
 reset role;
 
 -- create_transaction_from_line respeita a trava de mes fechado, com mensagem
--- clara em vez do erro cru de RLS/trigger.
+-- clara em vez do erro cru de RLS/trigger. unreconcile_line tambem precisa
+-- respeitar essa trava — ver 20250101001100_unreconcile_line_fix.sql: sem
+-- essa checagem, a linha do extrato voltaria a "pendente" mesmo que o
+-- UPDATE em transactions fosse silenciosamente recusado pela RLS,
+-- desalinhando as duas tabelas.
 do $$
 begin
   perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
@@ -711,6 +737,18 @@ do $$ begin perform pg_temp.expect_denied(
   '22222222-2222-2222-2222-222222222222',
   $q$select public.create_transaction_from_line('11110000-0000-0000-0000-000000000004', null, null)$q$,
   'create_transaction_from_line recusa lancar em mes fechado'
+); end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.unreconcile_line('11110000-0000-0000-0000-000000000008')$q$,
+  'unreconcile_line recusa desfazer conciliacao de mes fechado'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select status from public.statement_lines where id = '11110000-0000-0000-0000-000000000008'$q$) = 'conciliada',
+  'unreconcile_line recusado nao deixa a linha do extrato pela metade'
 ); end $$;
 
 do $$

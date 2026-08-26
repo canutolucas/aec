@@ -25,11 +25,22 @@ export async function getUser() {
 
 /** Empresas em que a pessoa tem vinculo, com o papel em cada uma. */
 export async function listCompanies(): Promise<Array<Company & { role: MemberRole }>> {
+  const user = await getUser();
+  if (!user) return [];
+
   const supabase = await createServerSupabase();
 
+  // O filtro por user_id nao e so uma otimizacao: sem ele, a policy de RLS
+  // (que so exige ser membro da MESMA empresa, nao dono da linha) devolve
+  // um membership por PESSOA na empresa, nao um por empresa. Numa empresa
+  // com dono e assistente, a consulta sem esse filtro traria as duas
+  // linhas, e o `.find()` em requireCompany() poderia pegar o papel do
+  // OUTRO membro em vez do proprio — confundindo assistente com owner ou
+  // o contrario na hora de decidir o que a interface mostra.
   const { data, error } = await supabase
     .from("memberships")
     .select("role, companies (id, name, legal_name, tax_id, timezone, is_active)")
+    .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
   if (error) throw error;
