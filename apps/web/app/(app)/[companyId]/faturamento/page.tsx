@@ -26,6 +26,14 @@ export default async function FaturamentoPage({
 
   const podeImportar = hasRole(session.role, "assistente");
 
+  // `number` e texto, nao inteiro — ordenar como string colocaria "10" antes
+  // de "9". `numeric: true` no collator compara pelo valor numerico dentro
+  // da string, entao a lista sai na ordem que a numeracao da nota realmente
+  // segue (pedido da usuaria final).
+  const invoices = ((data ?? []) as InvoiceBalance[])
+    .slice()
+    .sort((a, b) => a.number.localeCompare(b.number, "pt-BR", { numeric: true }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -43,11 +51,7 @@ export default async function FaturamentoPage({
         </Alert>
       )}
 
-      <FaturamentoClient
-        companyId={companyId}
-        podeImportar={podeImportar}
-        invoices={(data ?? []) as InvoiceBalance[]}
-      />
+      <FaturamentoClient companyId={companyId} podeImportar={podeImportar} invoices={invoices} />
     </div>
   );
 }
