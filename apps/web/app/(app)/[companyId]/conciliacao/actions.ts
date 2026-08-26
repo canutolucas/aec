@@ -2,8 +2,8 @@
 
 import { createHash } from "node:crypto";
 
-import { hasRole, type StatementSource, type TransactionDirection } from "@aec/db";
-import { type Cents, type IsoDate, toDb } from "@aec/domain";
+import { hasRole, type TransactionDirection } from "@aec/db";
+import { toDb } from "@aec/domain";
 import { type CanonicalStatement, ImportError } from "@aec/statements";
 import { parseCoraPdf } from "@aec/statements/node";
 import { revalidatePath } from "next/cache";
@@ -11,26 +11,11 @@ import { revalidatePath } from "next/cache";
 import { requireCompany } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 
+import { parsePayload } from "./parse-payload";
+
 export interface ActionResult {
   readonly ok: boolean;
   readonly error?: string;
-}
-
-interface ImportedLine {
-  readonly postedAt: IsoDate;
-  readonly amount: Cents;
-  readonly memo: string;
-  readonly fitid?: string;
-  readonly dedupKey: string;
-}
-
-interface ImportPayload {
-  readonly source: Extract<StatementSource, "ofx" | "csv" | "pdf">;
-  readonly periodStart?: IsoDate;
-  readonly periodEnd?: IsoDate;
-  readonly ledgerBalance?: Cents;
-  readonly ledgerBalanceDate?: IsoDate;
-  readonly lines: readonly ImportedLine[];
 }
 
 function canImport(role: Parameters<typeof hasRole>[0]) {
@@ -70,47 +55,6 @@ async function requireLineInCompany(
   if (error) return { ok: false, error: error.message };
   if (!data) return { ok: false, error: "Esta linha nao pertence a empresa selecionada." };
   return { ok: true };
-}
-
-function isValidLineShape(line: ImportedLine): boolean {
-  return (
-    typeof line.postedAt === "string" &&
-    /^\d{4}-\d{2}-\d{2}$/.test(line.postedAt) &&
-    Number.isSafeInteger(line.amount) &&
-    typeof line.memo === "string" &&
-    typeof line.dedupKey === "string" &&
-    line.dedupKey.length > 0
-  );
-}
-
-function parsePayload(value: string): ImportPayload | null {
-  try {
-    const payload = JSON.parse(value) as ImportPayload;
-    if (
-      (payload.source !== "ofx" && payload.source !== "csv" && payload.source !== "pdf") ||
-      !Array.isArray(payload.lines) ||
-      payload.lines.length === 0 ||
-      payload.lines.length > 10_000
-    ) {
-      return null;
-    }
-
-    if (!payload.lines.every(isValidLineShape)) return null;
-
-    // A zero-amount line is malformed, not just uninteresting: statement_lines
-    // has `check (amount <> 0)`, so inserting one would fail the whole batch
-    // at the database. csv.ts already drops these before they get this far;
-    // ofx.ts and node/cora.ts don't filter them (a $0.00 informational line
-    // is rarer but not impossible in a real export), so the same drop
-    // happens here — one stray zero-amount line shouldn't invalidate an
-    // otherwise-good statement with hundreds of real transactions.
-    const lines = payload.lines.filter((line) => line.amount !== 0);
-    if (lines.length === 0) return null;
-
-    return { ...payload, lines };
-  } catch {
-    return null;
-  }
 }
 
 /**
