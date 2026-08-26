@@ -636,6 +636,62 @@ begin
   );
 end $$;
 
+-- Um papel abaixo de assistente (cliente_leitura, o portal do cliente) nao
+-- consegue chamar nenhuma das quatro funcoes de conciliacao. Isso ja e
+-- garantido pelo RLS de statement_lines/transactions, nao pelas funcoes em
+-- si (elas sao SECURITY INVOKER) — mas so a policy nao aparecer aqui
+-- explicitamente testada seria deixar a garantia mais importante do
+-- conjunto sem uma prova direta.
+do $$
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$insert into public.statement_lines (id, company_id, import_id, bank_account_id, posted_at, amount, memo, dedup_key)
+       values ('11110000-0000-0000-0000-000000000007', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+               'e1e1e1e1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001',
+               '2025-04-15', -60.00, 'Linha para teste de papel', '20250415-role-check')$q$);
+end $$;
+
+do $$
+declare v_transaction_id uuid;
+begin
+  v_transaction_id := pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select id::text from public.transactions where description = 'Lancamento do assistente'$q$)::uuid;
+
+  perform pg_temp.expect_denied(
+    '33333333-3333-3333-3333-333333333333',
+    format($q$select public.reconcile_line('11110000-0000-0000-0000-000000000007', %L)$q$, v_transaction_id),
+    'cliente_leitura nao consegue chamar reconcile_line'
+  );
+end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '33333333-3333-3333-3333-333333333333',
+  $q$select public.create_transaction_from_line('11110000-0000-0000-0000-000000000007', null, null)$q$,
+  'cliente_leitura nao consegue chamar create_transaction_from_line'
+); end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '33333333-3333-3333-3333-333333333333',
+  $q$select public.ignore_line('11110000-0000-0000-0000-000000000007', 'Motivo qualquer')$q$,
+  'cliente_leitura nao consegue chamar ignore_line'
+); end $$;
+
+-- unreconcile_line precisa de uma linha ja conciliada para testar a recusa.
+do $$
+declare v_transaction_id uuid;
+begin
+  v_transaction_id := pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select id::text from public.transactions where description = 'Lancamento do assistente'$q$)::uuid;
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    format($q$select public.reconcile_line('11110000-0000-0000-0000-000000000007', %L)$q$, v_transaction_id));
+end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '33333333-3333-3333-3333-333333333333',
+  $q$select public.unreconcile_line('11110000-0000-0000-0000-000000000007')$q$,
+  'cliente_leitura nao consegue chamar unreconcile_line'
+); end $$;
+
 reset role;
 
 -- create_transaction_from_line respeita a trava de mes fechado, com mensagem
