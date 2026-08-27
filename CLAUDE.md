@@ -187,6 +187,47 @@ verdade com dados reais.
 - **`friendlyError()`** (`apps/web/lib/ui/format.ts`): garante que um erro
   técnico cru de Postgres/driver nunca seja a única coisa mostrada na tela.
 
+### Consolidação de status disperso (item 1 do backlog filosófico, esta leva)
+
+- **Alerta de caixa negativo em `/inicio`**: até esta leva só existia em
+  `/painel` — quem usa modo simples (a persona do dia a dia) nunca vê
+  `/painel`, então o aviso mais importante do sistema ("o caixa fica negativo
+  em tal dia") não chegava a ela. Agora `/inicio` roda a mesma projeção
+  (`project()` de `packages/domain`, mesmo horizonte de 30 dias, mesmas duas
+  consultas — saldo consolidado + previstos) e mostra o mesmo `Alert`
+  `tone="error"` que `/painel` já tinha. Melhor esforço: se qualquer uma das
+  duas consultas falhar, o card simplesmente não aparece — não derruba a
+  tela.
+- **Mês fechado/aberto em `/painel`**: antes só aparecia em `/lancamentos`;
+  quem usa o modo avançado não sabia sem navegar até lá. `/painel` agora
+  consulta `monthly_closings` do mês corrente e mostra o mesmo aviso, com
+  link para `/lancamentos` do mês.
+- **Contagem de não conciliados**: não virou um número único (seria inventar
+  comportamento novo) — os três lugares medem populações genuinamente
+  diferentes (`/painel`/`/contas` contam `transactions` sem conciliar via
+  `v_account_balances.unreconciled_count`; `/conciliacao` mostra essa MESMA
+  contagem lado a lado com `statement_lines` pendentes, uma população
+  diferente — linha de extrato que ainda não virou lançamento nem foi
+  casada). O que estava faltando era clareza: o aviso de `/painel` virou link
+  para `/conciliacao` e passou a citar as duas contagens separadamente em
+  vez de só uma ("N lançamento(s) sem conciliar; M linha(s) do extrato
+  aguardando tratamento"), então não existe mais um número que pareça
+  divergir do que a pessoa vê ao clicar.
+
+### Checagem de papel explícita em RPCs (item 2 do backlog filosófico, esta leva)
+
+`close_month`, `reopen_month` e `settle_invoices` dependiam só de RLS pra
+barrar quem não tem papel suficiente — a mensagem que subia nesse caso era o
+erro genérico do Postgres ("new row violates row-level security policy..."),
+quebrando a convenção deste arquivo (RPC valida com mensagem clara ANTES de
+escrever). `20250101001700_role_checks_rpc.sql` redefine as três com
+`app.has_role(...)` como a PRIMEIRA linha da função (mesmo padrão de
+`add_member`) — RLS continua sendo a autoridade real, isto só garante a
+mensagem certa chegando primeiro. `tests/sql/10_schema_test.sql` ganhou
+testes de negação pra cada uma (assistente barrado em `close_month`,
+cliente_leitura barrado em `reopen_month`; o teste de `settle_invoices` já
+existia, só o comentário foi atualizado).
+
 ## Fases do projeto — o que falta
 
 Todas as fases planejadas foram concluídas ou encerradas por decisão.
@@ -218,28 +259,23 @@ validação do parser contra XML real.
   que a usuária final sente falta no dia a dia, priorizar (1) consolidar
   status disperso, (2) fechar brechas de segurança/reversibilidade em
   automações que já existem, (3) só depois expandir escopo com feature nova.
-  Item (2) desta leva: regras de categorização agora visíveis/desligáveis em
-  modo simples (`/regras`) e `autoApplyReceivables` ganhou o bucket `failed`
-  que já faltava (ver "Modo simples" e "Faturamento / Recebimentos" acima).
-  Levantamento desta sessão achou mais candidatos ainda não feitos, pra quando
-  chegar a vez de (2) de novo: `close_month`/`reopen_month` e
-  `settle_invoices` não têm checagem de papel explícita na própria
-  RPC/função (só RLS); a trilha `audit_log` existe no banco mas não tem
-  NENHUMA tela que a exponha, nem pra quem já tem papel `contador`+ que a
-  RLS permite ler; várias tabelas (`matching_rules`, `statement_lines`,
-  `statement_imports`, `categories`, `counterparties`, `cost_centers`) não
-  têm trigger de auditoria; não existe ação de UI pra cancelar uma nota
-  fiscal já importada por engano (RLS permite, mas nenhum botão chama).
-  Item (1) — consolidar status disperso — continua o próximo candidato
-  natural: mês fechado/aberto só aparece em `/lancamentos`; notas vencidas e
-  alerta de caixa não aparecem em `/inicio` (a tela padrão de quem usa modo
-  simples); contagem de não-conciliados existe em 3 formas diferentes
-  (`/painel` agregado, `/contas` por conta, `/conciliacao` como lista) sem
-  um número único e consistente.
+  Feito até agora: regras de categorização visíveis/desligáveis em modo
+  simples (`/regras`), `autoApplyReceivables` com bucket `failed`, alerta de
+  caixa negativo e mês fechado consolidados (ver "Consolidação de status
+  disperso" e "Checagem de papel explícita em RPCs" acima — `close_month`/
+  `reopen_month`/`settle_invoices` já saíram da lista de pendências de (2)).
+  Candidatos que sobraram de (2), pra quando chegar a vez de novo: a trilha
+  `audit_log` existe no banco mas não tem NENHUMA tela que a exponha, nem pra
+  quem já tem papel `contador`+ que a RLS permite ler; várias tabelas
+  (`matching_rules`, `statement_lines`, `statement_imports`, `categories`,
+  `counterparties`, `cost_centers`) não têm trigger de auditoria; não existe
+  ação de UI pra cancelar uma nota fiscal já importada por engano (RLS
+  permite, mas nenhum botão chama).
 - Toda migration nova precisa ser colada manualmente pelo usuário no SQL
   Editor do Supabase em produção — este sandbox não tem acesso ao banco real.
-  A migration mais recente (`20250101001600_undo_transaction_from_line.sql`)
-  **já foi aplicada** pelo usuário.
+  A migration mais recente (`20250101001700_role_checks_rpc.sql`) **ainda não
+  foi aplicada** pelo usuário — a anterior
+  (`20250101001600_undo_transaction_from_line.sql`) já foi.
 - O parser de NFS-e foi validado contra UM município real (Salvador/BA,
   ABRASF v1). Um XML de outra prefeitura pode expor variações de layout ainda
   não cobertas pelos sinônimos de tag em `nfse.ts`.
