@@ -13,9 +13,8 @@ Este arquivo é o resumo de estado do projeto — escrito para sobreviver a um
 pnpm + Turborepo monorepo:
 
 - `apps/web` — Next.js 16 (App Router, Turbopack, Server Actions). O app real,
-  em produção.
-- `apps/mobile` — Expo, **ainda não iniciado** (Fase F, pendente há muito
-  tempo, baixa prioridade).
+  em produção. **É também o app de celular** — não existe app nativo; ver
+  "Web mobile" abaixo.
 - `packages/domain` — lógica pura (matching, auto-apply, receivables, regras,
   datas, dinheiro). Sem I/O, testável isolado.
 - `packages/statements` — parsers de importação. `universal/` roda em
@@ -119,6 +118,34 @@ PIX quitando várias notas de uma vez) via `packages/domain/src/receivables.ts`
 `InstallHint` em `/inicio` avisa como adicionar à tela inicial (iOS vs
 Android).
 
+### Web mobile (substitui a Fase F — ver "Fases do projeto")
+
+Não existe app nativo. A estratégia é **um único `apps/web` que também é bom
+no celular**, instalável como PWA. Correções já aplicadas nesta leva:
+
+- `CONTROL` em `packages/ui/src/components/form-fields.tsx` (usado por
+  `Field`/`Input`/`Select`/`Textarea` — **todo** formulário do sistema) era
+  `text-sm` (14px). Abaixo de 16px o Safari do iPhone dá zoom automático ao
+  focar o campo. Virou `text-base sm:text-sm` — 16px no celular, volta a 14px
+  a partir do breakpoint `sm` (desktop mantém a densidade original).
+- O menu avançado (`[companyId]/layout.tsx`) tem 9 itens numa lista sem
+  quebra nem rolagem — estourava ou espremia em qualquer tela de celular.
+  Ganhou `overflow-x-auto` + `flex-nowrap`, o mesmo padrão que as tabelas
+  largas do sistema já usavam.
+- Duas tabelas (`contas/contas-client.tsx`, `painel/page.tsx`, duas dentro
+  desta) não tinham o `overflow-x-auto` que `lancamentos`, `faturamento` e
+  `relatorios` já tinham — a rolagem horizontal vazava pra página inteira.
+  Ganharam o wrapper que faltava.
+
+Pendente para a próxima sessão (não bloqueante, ver "Pendências reais"):
+tamanho de toque dos botões `sm` (usados nas ações de linha das tabelas —
+por volta de 28px, abaixo do mínimo de 44px recomendado; não corrigido agora
+porque a densidade do desktop é proposital e a troca merece decidir com
+calma, não de passagem); navegação avançada continua em lista horizontal
+rolável em vez de um menu dedicado de celular (hambúrguer ou abas no rodapé);
+nenhuma tela foi testada de verdade num aparelho ou emulador nesta sessão —
+as correções vieram de leitura de código, não de captura de tela.
+
 ### Melhorias de workflow (última leva desta sessão)
 
 - **Status do mês** em `/inicio`: último extrato importado + notas vencidas.
@@ -134,10 +161,17 @@ Android).
 
 ## Fases do projeto — o que falta
 
-Todas as fases planejadas já foram concluídas, **exceto uma**:
+Todas as fases planejadas foram concluídas ou encerradas por decisão.
 
-- **Fase F — `apps/mobile` (Expo)**: não iniciada. Baixa prioridade, sem
-  pedido recente do usuário nem da usuária final.
+- **Fase F — app nativo (Expo)**: **encerrada por decisão do usuário em
+  2026-08-27**, não por falta de tempo. Chegou a existir um esqueleto Expo
+  commitado (`apps/mobile`: login, dashboard, lançamento rápido) — foi
+  removido nesta sessão. Motivo: o app nunca teria entregue uma capacidade
+  que o PWA do `apps/web` não entrega; o esforço real estava em arrumar a
+  camada de escrita presa em Server Actions, não em ter um segundo app. A
+  decisão foi trocar a Fase F por deixar **o próprio `apps/web` excelente no
+  celular** — ver "Web mobile" acima. Se um app nativo voltar à mesa um dia,
+  o ponto de partida é o histórico do git antes desta remoção, não do zero.
 
 Concluídas: Fases A–E (esqueleto do monorepo, domínio puro, design system,
 app web, conciliação), Fluxo Simples (5 fases: schema/session, domínio
@@ -147,8 +181,10 @@ validação do parser contra XML real.
 
 ## Pendências reais
 
-- **`apps/mobile` (Fase F)**: não iniciado. Baixa prioridade, sem pedido
-  recente do usuário.
+- **Web mobile**: primeira leva de correções aplicada (ver seção acima).
+  Falta: tamanho de toque dos botões de ação em tabela, um menu de celular
+  dedicado para as 9 telas avançadas, e testar de verdade num aparelho — as
+  correções desta leva vieram só de leitura de código.
 - **Backlog filosófico (tarefa aberta no task tracker)**: próximos updates
   devem continuar puxando da mesma linha — reler o que já existe, perguntar o
   que a usuária final sente falta no dia a dia, priorizar (1) consolidar
