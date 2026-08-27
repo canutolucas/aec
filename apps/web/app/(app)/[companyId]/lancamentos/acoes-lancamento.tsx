@@ -40,13 +40,20 @@ export function AcoesLancamento({
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex justify-end gap-2">
+      {/*
+       * `-my-2.5 py-2.5` amplia a área de toque no celular sem inflar a
+       * altura da linha (a margem negativa compensa o padding adicionado);
+       * some a partir de `sm:`, voltando ao alvo de toque original — mesma
+       * ideia do CVA de `sm` em button.tsx, aplicada à mão aqui porque estes
+       * dois não passam pelo componente Button.
+       */}
+      <div className="flex justify-end gap-4 sm:gap-2">
         {lancamento.status === "previsto" && (
           <button
             type="button"
             onClick={baixar}
             disabled={pendente}
-            className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+            className="text-primary -my-2.5 py-2.5 text-xs underline-offset-2 hover:underline disabled:opacity-50 sm:my-0 sm:py-0"
           >
             dar baixa
           </button>
@@ -55,7 +62,7 @@ export function AcoesLancamento({
           type="button"
           onClick={excluir}
           disabled={pendente}
-          className="text-muted-foreground hover:text-outflow text-xs underline-offset-2 hover:underline disabled:opacity-50"
+          className="text-muted-foreground hover:text-outflow -my-2.5 py-2.5 text-xs underline-offset-2 hover:underline disabled:opacity-50 sm:my-0 sm:py-0"
         >
           excluir
         </button>

@@ -17,7 +17,10 @@ export const buttonVariants = cva(
       },
       size: {
         default: "px-3 py-2",
-        sm: "px-2.5 py-1.5 text-xs",
+        // ~44px de altura no celular (alvo de toque mínimo recomendado),
+        // volta à densidade original a partir do breakpoint `sm:` — mesmo
+        // padrão do CONTROL em form-fields.tsx.
+        sm: "px-3 py-3 text-sm sm:px-2.5 sm:py-1.5 sm:text-xs",
       },
     },
     defaultVariants: { variant: "primary", size: "default" },
