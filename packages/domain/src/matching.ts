@@ -205,18 +205,23 @@ function describe(
   documentHit: boolean,
   exactTolerance: number,
 ): string {
-  const parts: string[] = ["same amount"];
+  // Em portugues: e este texto, montado aqui, que a tela de conciliacao
+  // mostra como motivo do pareamento — a justificativa que a pessoa usa
+  // pra decidir se confirma. Ate esta leva saia em ingles cru ("same
+  // amount, 3 days apart, confirm before accepting") dentro de uma frase
+  // em portugues.
+  const parts: string[] = ["mesmo valor"];
 
   if (dayGap === 0) {
-    parts.push("same date");
+    parts.push("mesma data");
   } else {
-    parts.push(`${dayGap} day${dayGap === 1 ? "" : "s"} apart`);
+    parts.push(`${dayGap} dia${dayGap === 1 ? "" : "s"} de diferença`);
   }
 
-  if (documentHit) parts.push("document number in memo");
-  if (similarity >= 0.5) parts.push("similar description");
+  if (documentHit) parts.push("número do documento no histórico");
+  if (similarity >= 0.5) parts.push("descrição parecida");
 
-  if (dayGap > exactTolerance) parts.push("confirm before accepting");
+  if (dayGap > exactTolerance) parts.push("confirme antes de aceitar");
 
   return parts.join(", ");
 }

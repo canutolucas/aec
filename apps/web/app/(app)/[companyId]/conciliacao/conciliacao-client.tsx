@@ -16,6 +16,8 @@ import { Alert, Badge, Button, Card, CardHeader, EmptyState, Field, Select } fro
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
+import { formatDate } from "@/lib/ui/format";
+
 import {
   autoApplyReconciliation,
   createMatchingRule,
@@ -438,7 +440,7 @@ export function ReconciliationClient({
           <div className="grid gap-4 p-4 sm:grid-cols-3">
             <div>
               <p className="text-muted-foreground text-xs">
-                Saldo do extrato em {balanceCheck.declaredDate}
+                Saldo do extrato em {formatDate(balanceCheck.declaredDate)}
               </p>
               <p className="font-mono text-lg font-semibold tabular-nums">
                 {formatBRL(balanceCheck.declaredBalance)}
@@ -510,11 +512,12 @@ export function ReconciliationClient({
                 <div className="grid gap-1 text-sm">
                   <p className="font-medium">{match.line.memo || "Movimento sem historico"}</p>
                   <p className="text-muted-foreground">
-                    Extrato: {match.line.posted_at} · {formatBRL(fromDb(match.line.amount))}
+                    Extrato: {formatDate(match.line.posted_at)} ·{" "}
+                    {formatBRL(fromDb(match.line.amount))}
                   </p>
                   <p className="text-muted-foreground">
-                    Lançamento: {match.transaction.booking_date} · {match.transaction.description} ·{" "}
-                    {formatBRL(fromDb(match.transaction.amount))}
+                    Lançamento: {formatDate(match.transaction.booking_date)} ·{" "}
+                    {match.transaction.description} · {formatBRL(fromDb(match.transaction.amount))}
                   </p>
                   <p className="text-muted-foreground text-xs">
                     {match.confidence === "exact" ? "Coincidência exata" : "Sugestão"}:{" "}
@@ -556,7 +559,7 @@ export function ReconciliationClient({
                     <div>
                       <p className="font-medium">{line.memo || "Movimento sem historico"}</p>
                       <p className="text-muted-foreground text-sm">
-                        {line.posted_at} · {formatBRL(fromDb(line.amount))}
+                        {formatDate(line.posted_at)} · {formatBRL(fromDb(line.amount))}
                       </p>
                     </div>
                     {suggested.appliedRuleId && (
@@ -647,7 +650,7 @@ export function ReconciliationClient({
               <div key={transaction.id} className="p-4 text-sm">
                 <p className="font-medium">{transaction.description}</p>
                 <p className="text-muted-foreground">
-                  {transaction.booking_date} · {formatBRL(fromDb(transaction.amount))}
+                  {formatDate(transaction.booking_date)} · {formatBRL(fromDb(transaction.amount))}
                 </p>
               </div>
             ))}
@@ -664,7 +667,7 @@ export function ReconciliationClient({
                 <div>
                   <p className="font-medium">{line.memo || "Movimento sem historico"}</p>
                   <p className="text-muted-foreground">
-                    {line.posted_at} · {formatBRL(fromDb(line.amount))} ·{" "}
+                    {formatDate(line.posted_at)} · {formatBRL(fromDb(line.amount))} ·{" "}
                     {line.status === "criada" ? "lançamento criado" : "conciliada"}
                   </p>
                 </div>

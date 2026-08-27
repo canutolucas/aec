@@ -115,7 +115,7 @@ describe("suggestion when the date is far off", () => {
     expect(result.matched).toHaveLength(0);
     expect(result.suggested).toHaveLength(1);
     expect(result.suggested[0]!.dayGap).toBe(20);
-    expect(result.suggested[0]!.reason).toContain("confirm before accepting");
+    expect(result.suggested[0]!.reason).toContain("confirme antes de aceitar");
   });
 
   it("doesn't even suggest beyond the maximum window", () => {
@@ -175,7 +175,7 @@ describe("document number in the memo", () => {
     );
 
     expect(result.matched[0]!.transactionId).toBe("t-with-doc");
-    expect(result.matched[0]!.reason).toContain("document number");
+    expect(result.matched[0]!.reason).toContain("número do documento");
   });
 });
 
