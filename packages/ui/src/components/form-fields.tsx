@@ -21,8 +21,11 @@ export function Field({
   );
 }
 
+// text-base (16px) até `sm:` — abaixo de 16px o Safari do iPhone dá zoom
+// automático ao focar o campo. Em telas maiores volta a text-sm (14px), a
+// densidade que o resto do app usa.
 const CONTROL =
-  "w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30";
+  "w-full rounded-md border border-input bg-card px-3 py-2 text-base text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 sm:text-sm";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cn(CONTROL, className)} {...props} />;

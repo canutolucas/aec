@@ -95,13 +95,21 @@ export default async function CompanyLayout({
           </div>
         </div>
 
-        <nav className="mx-auto max-w-7xl px-4">
-          <ul className="flex gap-1">
+        {/*
+         * Com 9 itens (menu avancado), a lista nao cabe na largura de um
+         * celular. `overflow-x-auto` deixa rolar horizontalmente em vez de
+         * quebrar linha ou espremer os rotulos — o padrao ja usado nas
+         * tabelas largas do sistema (lancamentos, faturamento, relatorios).
+         * `flex-nowrap` e explicito para o navegador nunca tentar encolher
+         * os itens antes de rolar.
+         */}
+        <nav className="mx-auto max-w-7xl overflow-x-auto px-4">
+          <ul className="flex flex-nowrap gap-1">
             {(session.simpleMode ? simpleNav(session.role) : NAV).map((item) => (
-              <li key={item.key}>
+              <li key={item.key} className="shrink-0">
                 <Link
                   href={item.href(companyId)}
-                  className="text-muted-foreground hover:border-border hover:text-foreground -mb-px block border-b-2 border-transparent px-3 py-2 text-sm"
+                  className="text-muted-foreground hover:border-border hover:text-foreground -mb-px block border-b-2 border-transparent px-3 py-2 text-sm whitespace-nowrap"
                 >
                   {item.label}
                 </Link>

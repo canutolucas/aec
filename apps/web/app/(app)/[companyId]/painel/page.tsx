@@ -147,26 +147,28 @@ export default async function PainelPage({ params }: { params: Promise<{ company
               </Link>
             }
           />
-          <table className="w-full text-sm">
-            <tbody className="divide-border divide-y">
-              {contas.map((conta) => (
-                <tr key={conta.bank_account_id}>
-                  <td className="px-4 py-2">{conta.name}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <tbody className="divide-border divide-y">
+                {contas.map((conta) => (
+                  <tr key={conta.bank_account_id}>
+                    <td className="px-4 py-2">{conta.name}</td>
+                    <td className="px-4 py-2 text-right">
+                      <Money cents={fromDb(conta.current_balance)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-border border-t-2 font-semibold">
+                  <td className="px-4 py-2">Total</td>
                   <td className="px-4 py-2 text-right">
-                    <Money cents={fromDb(conta.current_balance)} />
+                    <Money cents={saldoAtual} />
                   </td>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-border border-t-2 font-semibold">
-                <td className="px-4 py-2">Total</td>
-                <td className="px-4 py-2 text-right">
-                  <Money cents={saldoAtual} />
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+              </tfoot>
+            </table>
+          </div>
         </Card>
 
         <Card>
@@ -188,24 +190,26 @@ export default async function PainelPage({ params }: { params: Promise<{ company
               description="Lancamentos com situacao 'previsto' aparecem aqui e alimentam a projecao de caixa."
             />
           ) : (
-            <table className="w-full text-sm">
-              <tbody className="divide-border divide-y">
-                {previstos.slice(0, 10).map((previsto) => (
-                  <tr key={previsto.id}>
-                    <td className="tabular-money text-muted-foreground px-4 py-2 whitespace-nowrap">
-                      {formatDate(previsto.booking_date)}
-                      {previsto.booking_date < hoje && (
-                        <span className="text-outflow ml-1">vencido</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">{previsto.description}</td>
-                    <td className="px-4 py-2 text-right whitespace-nowrap">
-                      <Money cents={fromDb(previsto.amount)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <tbody className="divide-border divide-y">
+                  {previstos.slice(0, 10).map((previsto) => (
+                    <tr key={previsto.id}>
+                      <td className="tabular-money text-muted-foreground px-4 py-2 whitespace-nowrap">
+                        {formatDate(previsto.booking_date)}
+                        {previsto.booking_date < hoje && (
+                          <span className="text-outflow ml-1">vencido</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2">{previsto.description}</td>
+                      <td className="px-4 py-2 text-right whitespace-nowrap">
+                        <Money cents={fromDb(previsto.amount)} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
       </div>
