@@ -1,11 +1,13 @@
 import { hasRole, ROLE_LABELS } from "@aec/db";
-import { Logo } from "@aec/ui";
+import { cn, Logo } from "@aec/ui";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { requireCompany } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 import { routes } from "@/lib/ui/routes";
+
+import { MobileTabBar } from "./mobile-tab-bar";
 
 const NAV = [
   { key: "painel", label: "Painel", href: routes.dashboard },
@@ -97,13 +99,19 @@ export default async function CompanyLayout({
 
         {/*
          * Com 9 itens (menu avancado), a lista nao cabe na largura de um
-         * celular. `overflow-x-auto` deixa rolar horizontalmente em vez de
-         * quebrar linha ou espremer os rotulos — o padrao ja usado nas
-         * tabelas largas do sistema (lancamentos, faturamento, relatorios).
-         * `flex-nowrap` e explicito para o navegador nunca tentar encolher
-         * os itens antes de rolar.
+         * celular. Acima de `md:` continua a rolagem horizontal
+         * (`overflow-x-auto` + `flex-nowrap`, o padrao ja usado nas tabelas
+         * largas do sistema); abaixo de `md:` esse `<nav>` some e da lugar a
+         * <MobileTabBar>, a barra de abas fixa no rodape. No modo simples
+         * (3-4 itens) a lista ja cabe numa linha em qualquer largura, entao
+         * fica so a rolagem, sem barra dedicada.
          */}
-        <nav className="mx-auto max-w-7xl overflow-x-auto px-4">
+        <nav
+          className={cn(
+            "mx-auto max-w-7xl overflow-x-auto px-4",
+            !session.simpleMode && "hidden md:block",
+          )}
+        >
           <ul className="flex flex-nowrap gap-1">
             {(session.simpleMode ? simpleNav(session.role) : NAV).map((item) => (
               <li key={item.key} className="shrink-0">
@@ -119,7 +127,10 @@ export default async function CompanyLayout({
         </nav>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      {!session.simpleMode && <MobileTabBar companyId={companyId} />}
+
+      {/* pb-20 no celular pra conteudo nao ficar embaixo da MobileTabBar fixa; pt-6/pb-6 explicitos (em vez de py-6) pra nao colidir com o pb-20/md:pb-6 na mesma propriedade */}
+      <main className="mx-auto max-w-7xl px-4 pt-6 pb-20 md:pb-6">{children}</main>
     </div>
   );
 }

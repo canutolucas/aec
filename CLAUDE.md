@@ -136,15 +136,26 @@ no celular**, instalável como PWA. Correções já aplicadas nesta leva:
   desta) não tinham o `overflow-x-auto` que `lancamentos`, `faturamento` e
   `relatorios` já tinham — a rolagem horizontal vazava pra página inteira.
   Ganharam o wrapper que faltava.
+- **Alvo de toque dos botões `sm`** (`packages/ui/src/components/button.tsx`):
+  eram ~28px de altura. Mesmo padrão do `CONTROL` acima — `px-3 py-3 text-sm`
+  no celular (~44px), volta a `px-2.5 py-1.5 text-xs` a partir de `sm:`. Os
+  dois `<button>` avulsos de `lancamentos/acoes-lancamento.tsx` (não passam
+  pelo componente `Button`) ganharam o mesmo tratamento à mão (padding +
+  margem negativa, revertido em `sm:`).
+- **Menu avançado no celular**: as 9 telas agora têm um menu dedicado — uma
+  barra de abas fixa no rodapé (`[companyId]/mobile-tab-bar.tsx`, ícones
+  `lucide-react`) com Painel/Lançamentos/Conciliação/Faturamento fixos + uma
+  aba "Mais" abrindo as 5 restantes (Recebimentos, Contas, Relatórios,
+  Cadastros, Equipe) numa folha inferior. Só abaixo de `md:` — o `<nav>`
+  horizontal original continua intacto em telas maiores. Modo simples (3-4
+  itens) não ganhou barra: já cabe numa linha só.
 
 Pendente para a próxima sessão (não bloqueante, ver "Pendências reais"):
-tamanho de toque dos botões `sm` (usados nas ações de linha das tabelas —
-por volta de 28px, abaixo do mínimo de 44px recomendado; não corrigido agora
-porque a densidade do desktop é proposital e a troca merece decidir com
-calma, não de passagem); navegação avançada continua em lista horizontal
-rolável em vez de um menu dedicado de celular (hambúrguer ou abas no rodapé);
-nenhuma tela foi testada de verdade num aparelho ou emulador nesta sessão —
-as correções vieram de leitura de código, não de captura de tela.
+nenhuma tela foi testada de verdade num aparelho — esta leva verificou a
+barra de abas e os botões via print em Chromium headless (não dá pra logar
+de verdade neste sandbox, sem `docker`/Supabase local), o que pega mais bug
+visual do que só ler código, mas ainda não é a mesma coisa que um aparelho de
+verdade com dados reais.
 
 ### Melhorias de workflow (última leva desta sessão)
 
@@ -181,10 +192,10 @@ validação do parser contra XML real.
 
 ## Pendências reais
 
-- **Web mobile**: primeira leva de correções aplicada (ver seção acima).
-  Falta: tamanho de toque dos botões de ação em tabela, um menu de celular
-  dedicado para as 9 telas avançadas, e testar de verdade num aparelho — as
-  correções desta leva vieram só de leitura de código.
+- **Web mobile**: alvo de toque e menu dedicado (barra de abas) já feitos —
+  ver seção acima. Falta só testar de verdade num aparelho; este sandbox não
+  tem `docker` (`docker ps` falha), então não dá pra subir Supabase local e
+  logar de verdade pra verificar as telas autenticadas ao vivo.
 - **Backlog filosófico (tarefa aberta no task tracker)**: próximos updates
   devem continuar puxando da mesma linha — reler o que já existe, perguntar o
   que a usuária final sente falta no dia a dia, priorizar (1) consolidar
