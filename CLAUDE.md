@@ -90,10 +90,20 @@ decisão humana (pareamento "provável", linha sem categoria). Toda escolha
 manual de categoria já cria a regra de aprendizado automaticamente (sem
 checkbox — diferente da tela avançada). `requireAdvancedAccess()` esconde as
 telas avançadas de quem está em modo simples; `requireCompany()` continua
-valendo pras 3 exceções deliberadas: Início, Faturamento, Recebimentos (tarefa
-do dia a dia, não "avançado") e Equipe (é a ÚNICA tela que desliga o modo
-simples — sem ela visível, um owner que ligasse o modo simples em si mesmo
-ficaria trancado para sempre).
+valendo pras 4 exceções deliberadas: Início, Faturamento, Recebimentos
+(tarefa do dia a dia, não "avançado"), Regras (ver abaixo) e Equipe (é a
+ÚNICA tela que desliga o modo simples — sem ela visível, um owner que ligasse
+o modo simples em si mesmo ficaria trancado para sempre).
+
+- **`/regras`** (nova rota, não faz parte de `simpleNav()` nem do `NAV`
+  avançado — alcançada por um link a partir do card "Status do mes" em
+  `/inicio`, não uma aba): antes, quem estava em modo simples não tinha
+  NENHUMA forma de ver ou desligar uma regra automática ruim depois que ela
+  saía do "último lançamento da sessão" (o único undo que `/inicio` oferece)
+  — precisava pedir pro owner desligar o modo simples primeiro só pra chegar
+  em `/cadastros`. Reaproveita `listMatchingRules`/`desativarRegra` que já
+  existiam; a lista em si foi extraída de `cadastros-client.tsx` para
+  `cadastros/regras-list.tsx`, usada pelas duas telas.
 
 ### Faturamento / Recebimentos (feature grande desta sessão)
 
@@ -110,6 +120,13 @@ PIX quitando várias notas de uma vez) via `packages/domain/src/receivables.ts`
 * O arquivo real vem em **ISO-8859-1**, não UTF-8 — `decodeInvoiceXml` lê o
   encoding declarado no prolog antes de decodificar (senão nome de cliente
   com acento vira mojibake).
+
+`autoApplyReceivables` (`apps/web/lib/db/faturamento.ts`) agora tem o bucket
+`failed`/`errors` que a convenção de auto-aplicação exige — não tinha antes
+(uma alocação recusada pela RPC só "ficava sem aplicar" em silêncio,
+quebrando a própria convenção deste arquivo). Aparece em `/recebimentos`
+(card "Não processado", com "Tentar de novo") e como um aviso curto no card
+de recebimentos de `/inicio`.
 
 ### PWA / ícones
 
@@ -201,6 +218,24 @@ validação do parser contra XML real.
   que a usuária final sente falta no dia a dia, priorizar (1) consolidar
   status disperso, (2) fechar brechas de segurança/reversibilidade em
   automações que já existem, (3) só depois expandir escopo com feature nova.
+  Item (2) desta leva: regras de categorização agora visíveis/desligáveis em
+  modo simples (`/regras`) e `autoApplyReceivables` ganhou o bucket `failed`
+  que já faltava (ver "Modo simples" e "Faturamento / Recebimentos" acima).
+  Levantamento desta sessão achou mais candidatos ainda não feitos, pra quando
+  chegar a vez de (2) de novo: `close_month`/`reopen_month` e
+  `settle_invoices` não têm checagem de papel explícita na própria
+  RPC/função (só RLS); a trilha `audit_log` existe no banco mas não tem
+  NENHUMA tela que a exponha, nem pra quem já tem papel `contador`+ que a
+  RLS permite ler; várias tabelas (`matching_rules`, `statement_lines`,
+  `statement_imports`, `categories`, `counterparties`, `cost_centers`) não
+  têm trigger de auditoria; não existe ação de UI pra cancelar uma nota
+  fiscal já importada por engano (RLS permite, mas nenhum botão chama).
+  Item (1) — consolidar status disperso — continua o próximo candidato
+  natural: mês fechado/aberto só aparece em `/lancamentos`; notas vencidas e
+  alerta de caixa não aparecem em `/inicio` (a tela padrão de quem usa modo
+  simples); contagem de não-conciliados existe em 3 formas diferentes
+  (`/painel` agregado, `/contas` por conta, `/conciliacao` como lista) sem
+  um número único e consistente.
 - Toda migration nova precisa ser colada manualmente pelo usuário no SQL
   Editor do Supabase em produção — este sandbox não tem acesso ao banco real.
   A migration mais recente (`20250101001600_undo_transaction_from_line.sql`)

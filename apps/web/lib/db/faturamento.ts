@@ -219,11 +219,26 @@ export interface AutoApplyReceivablesSuggestion {
   readonly reason: string;
 }
 
+export interface AutoApplyReceivablesFailure {
+  readonly transactionId: string;
+  readonly transactionDescription: string;
+  readonly creditAmount: Cents;
+  readonly invoiceNumber: string;
+  readonly error: string;
+}
+
 export interface AutoApplyReceivablesResult {
   readonly ok: boolean;
   readonly error?: string;
   readonly settled?: number;
   readonly suggested?: readonly AutoApplyReceivablesSuggestion[];
+  /**
+   * Uma alocacao que a RPC recusa (ex.: mes fechado entre a hora que a
+   * pagina carregou e a hora que este lote rodou) nao pode so desaparecer —
+   * mesma convencao de AutoApplyFailure em conciliacao/actions.ts: "nada
+   * some em silencio".
+   */
+  readonly failed?: readonly AutoApplyReceivablesFailure[];
 }
 
 /**
@@ -268,7 +283,7 @@ export async function autoApplyReceivables(input: {
   const openInvoices = invoicesResult.data ?? [];
   const credits = creditsResult.data ?? [];
   if (openInvoices.length === 0 || credits.length === 0) {
-    return { ok: true, settled: 0, suggested: [] };
+    return { ok: true, settled: 0, suggested: [], failed: [] };
   }
 
   // So os creditos que ainda nao tem NENHUMA alocacao — um credito ja usado
@@ -283,7 +298,7 @@ export async function autoApplyReceivables(input: {
   const settledTransactionIds = new Set((existingSettlements ?? []).map((s) => s.transaction_id));
   const unsweptCredits = credits.filter((c) => !settledTransactionIds.has(c.id));
   if (unsweptCredits.length === 0) {
-    return { ok: true, settled: 0, suggested: [] };
+    return { ok: true, settled: 0, suggested: [], failed: [] };
   }
 
   // Contraparte ja vinculada por counterparty_id ganha do texto livre —
@@ -330,6 +345,7 @@ export async function autoApplyReceivables(input: {
   );
 
   let settled = 0;
+  const failed: AutoApplyReceivablesFailure[] = [];
   for (const match of plan.matched) {
     const invoiceId = match.invoiceIds[0];
     if (!invoiceId) continue;
@@ -341,9 +357,23 @@ export async function autoApplyReceivables(input: {
       p_allocations: [{ invoice_id: invoiceId, amount: invoice.outstanding_amount }],
     });
     // Uma alocacao que a RPC recusa (ex.: mes fechado) nao derruba o lote —
-    // so fica sem aplicar; a proxima chamada de autoApplyReceivables tenta
-    // de novo, o mesmo raciocinio de autoApplyReconciliation.
-    if (!error) settled++;
+    // so fica sem aplicar, e vai para "failed" em vez de sumir (mesmo
+    // raciocinio de AutoApplyFailure em conciliacao/actions.ts); a proxima
+    // chamada de autoApplyReceivables tenta de novo.
+    if (error) {
+      const credit = creditById.get(match.transactionId);
+      if (credit) {
+        failed.push({
+          transactionId: credit.id,
+          transactionDescription: credit.description,
+          creditAmount: fromDb(credit.amount),
+          invoiceNumber: invoice.number ?? "",
+          error: error.message,
+        });
+      }
+      continue;
+    }
+    settled++;
   }
 
   const suggested: AutoApplyReceivablesSuggestion[] = plan.suggested.flatMap((match) => {
@@ -390,5 +420,5 @@ export async function autoApplyReceivables(input: {
   revalidatePath(`/${input.companyId}/faturamento`);
   revalidatePath(`/${input.companyId}/recebimentos`);
   revalidatePath(`/${input.companyId}/painel`);
-  return { ok: true, settled, suggested };
+  return { ok: true, settled, suggested, failed };
 }

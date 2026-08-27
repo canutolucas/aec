@@ -15,6 +15,7 @@ import { useEffect, useState, useTransition } from "react";
 
 import {
   autoApplyReceivables,
+  type AutoApplyReceivablesFailure,
   type AutoApplyReceivablesSuggestion,
   settleInvoicesAction,
 } from "@/lib/db/faturamento";
@@ -32,6 +33,7 @@ export function RecebimentosClient({
   const [status, setStatus] = useState<"loading" | "done">("loading");
   const [settledTotal, setSettledTotal] = useState(0);
   const [suggestions, setSuggestions] = useState<readonly AutoApplyReceivablesSuggestion[]>([]);
+  const [failed, setFailed] = useState<readonly AutoApplyReceivablesFailure[]>([]);
   const [feedback, setFeedback] = useState<{ text: string; tone: "warn" | "error" } | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -42,6 +44,7 @@ export function RecebimentosClient({
 
       let settled = 0;
       const allSuggestions: AutoApplyReceivablesSuggestion[] = [];
+      const allFailed: AutoApplyReceivablesFailure[] = [];
       const errors: string[] = [];
 
       for (const account of accounts) {
@@ -52,10 +55,12 @@ export function RecebimentosClient({
         }
         settled += result.settled ?? 0;
         allSuggestions.push(...(result.suggested ?? []));
+        allFailed.push(...(result.failed ?? []));
       }
 
       setSettledTotal(settled);
       setSuggestions(allSuggestions);
+      setFailed(allFailed);
       if (errors.length > 0) setFeedback({ text: errors.join(" "), tone: "error" });
       setStatus("done");
       if (settled > 0) router.refresh();
@@ -71,7 +76,6 @@ export function RecebimentosClient({
     // que e a forma que o React recomenda pra disparar trabalho assincrono
     // a partir de um efeito sem cascata de render sincrona.
     runAutoApply();
-     
   }, []);
 
   function confirmar(suggestion: AutoApplyReceivablesSuggestion) {
@@ -79,7 +83,10 @@ export function RecebimentosClient({
       const result = await settleInvoicesAction({
         companyId,
         transactionId: suggestion.transactionId,
-        allocations: suggestion.allocations.map((a) => ({ invoiceId: a.invoiceId, amount: a.amount })),
+        allocations: suggestion.allocations.map((a) => ({
+          invoiceId: a.invoiceId,
+          amount: a.amount,
+        })),
       });
       if (!result.ok) {
         setFeedback({ text: result.error ?? "Não foi possível dar baixa.", tone: "error" });
@@ -106,7 +113,9 @@ export function RecebimentosClient({
         />
         <div className="p-4">
           {status === "loading" ? (
-            <p className="text-muted-foreground text-sm">Procurando créditos e notas em aberto...</p>
+            <p className="text-muted-foreground text-sm">
+              Procurando créditos e notas em aberto...
+            </p>
           ) : (
             <p className="text-sm">
               <span className="font-semibold">{settledTotal}</span> recebimento(s) confirmado(s)
@@ -150,6 +159,29 @@ export function RecebimentosClient({
               ))}
             </div>
           )}
+        </Card>
+      )}
+
+      {status === "done" && failed.length > 0 && (
+        <Card>
+          <CardHeader title={`Não processado (${failed.length})`} />
+          <div className="divide-border divide-y">
+            {failed.map((item) => (
+              <div key={item.transactionId} className="p-4">
+                <p className="text-sm">
+                  {item.transactionDescription || "Movimento sem histórico"} ·{" "}
+                  {formatBRL(item.creditAmount)}
+                  {item.invoiceNumber ? ` → nota ${item.invoiceNumber}` : ""}
+                </p>
+                <p className="text-muted-foreground text-xs">{item.error}</p>
+              </div>
+            ))}
+          </div>
+          <div className="border-border border-t p-4">
+            <Button size="sm" variant="ghost" disabled={isPending} onClick={runAutoApply}>
+              Tentar de novo
+            </Button>
+          </div>
         </Card>
       )}
     </div>

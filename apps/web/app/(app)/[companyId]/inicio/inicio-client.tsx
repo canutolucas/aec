@@ -57,7 +57,11 @@ interface SessionState {
    * a checagem nao rodou ou falhou — nao bloqueia o resto do fluxo, e so um
    * bonus em cima da conciliacao de extrato que ja funcionou.
    */
-  readonly receivables: { readonly settled: number; readonly pending: number } | null;
+  readonly receivables: {
+    readonly settled: number;
+    readonly pending: number;
+    readonly failed: number;
+  } | null;
 }
 
 export function InicioClient({
@@ -89,7 +93,7 @@ export function InicioClient({
 
   function applySession(
     result: AutoApplyResult,
-    receivables?: { settled: number; pending: number } | null,
+    receivables?: { settled: number; pending: number; failed: number } | null,
   ) {
     setSession((prev) => ({
       reconciled: (prev?.reconciled ?? 0) + (result.reconciled ?? 0),
@@ -143,6 +147,7 @@ export function InicioClient({
         ? {
             settled: receivablesResult.settled ?? 0,
             pending: receivablesResult.suggested?.length ?? 0,
+            failed: receivablesResult.failed?.length ?? 0,
           }
         : null;
 
@@ -463,6 +468,22 @@ export function InicioClient({
                   </LinkButton>
                 )}
               </div>
+              {session.receivables.failed > 0 && (
+                <div className="border-border border-t p-4">
+                  <p className="text-sm">
+                    <span className="text-destructive font-semibold">
+                      {session.receivables.failed}
+                    </span>{" "}
+                    não pôde(pôderam) ser aplicado(s) automaticamente.{" "}
+                    <a
+                      href={routes.receivables(companyId)}
+                      className="underline underline-offset-2 hover:no-underline"
+                    >
+                      Ver detalhe em Recebimentos
+                    </a>
+                  </p>
+                </div>
+              )}
             </Card>
           )}
 
