@@ -281,9 +281,8 @@ validação do parser contra XML real.
   permite, mas nenhum botão chama).
 - Toda migration nova precisa ser colada manualmente pelo usuário no SQL
   Editor do Supabase em produção — este sandbox não tem acesso ao banco real.
-  A migration mais recente (`20250101001700_role_checks_rpc.sql`) **ainda não
-  foi aplicada** pelo usuário — a anterior
-  (`20250101001600_undo_transaction_from_line.sql`) já foi.
+  A migration mais recente (`20250101001700_role_checks_rpc.sql`) **já foi
+  aplicada** pelo usuário.
 - O parser de NFS-e foi validado contra UM município real (Salvador/BA,
   ABRASF v1). Um XML de outra prefeitura pode expor variações de layout ainda
   não cobertas pelos sinônimos de tag em `nfse.ts`.
