@@ -132,6 +132,19 @@ Android).
 - **`friendlyError()`** (`apps/web/lib/ui/format.ts`): garante que um erro
   técnico cru de Postgres/driver nunca seja a única coisa mostrada na tela.
 
+## Fases do projeto — o que falta
+
+Todas as fases planejadas já foram concluídas, **exceto uma**:
+
+- **Fase F — `apps/mobile` (Expo)**: não iniciada. Baixa prioridade, sem
+  pedido recente do usuário nem da usuária final.
+
+Concluídas: Fases A–E (esqueleto do monorepo, domínio puro, design system,
+app web, conciliação), Fluxo Simples (5 fases: schema/session, domínio
+auto-apply, rota `/inicio`, navegação, controle do owner), Faturamento (5
+fases: schema, parser NFS-e, domínio receivables, Server Actions, telas) e a
+validação do parser contra XML real.
+
 ## Pendências reais
 
 - **`apps/mobile` (Fase F)**: não iniciado. Baixa prioridade, sem pedido
