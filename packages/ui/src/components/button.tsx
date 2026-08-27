@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 
 import { cn } from "../lib/cn";
+import { Spinner } from "./spinner";
 
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
@@ -27,11 +28,35 @@ export const buttonVariants = cva(
   },
 );
 
-export interface ButtonProps
-  extends ComponentProps<"button">, VariantProps<typeof buttonVariants> {}
+export interface ButtonProps extends ComponentProps<"button">, VariantProps<typeof buttonVariants> {
+  /**
+   * Mostra um spinner e desabilita o botao. Antes desta leva, toda tela do
+   * app comunicava "carregando" so trocando o texto do botao na mao
+   * ("Gravando...", "Importando..."); isto padroniza sem tirar a
+   * possibilidade de continuar trocando o texto tambem.
+   */
+  loading?: boolean;
+}
 
-export function Button({ className, variant, size, ...props }: ButtonProps) {
-  return <button className={cn(buttonVariants({ variant, size }), className)} {...props} />;
+export function Button({
+  className,
+  variant,
+  size,
+  loading,
+  disabled,
+  children,
+  ...props
+}: ButtonProps) {
+  return (
+    <button
+      className={cn(buttonVariants({ variant, size }), className)}
+      disabled={disabled || loading}
+      {...props}
+    >
+      {loading && <Spinner className="size-3.5" />}
+      {children}
+    </button>
+  );
 }
 
 export interface LinkButtonProps

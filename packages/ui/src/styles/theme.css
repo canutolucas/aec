@@ -2,15 +2,14 @@
  * Brand theme tokens, in the shadcn/TweakCN convention: HSL triples on
  * `:root`/`.dark`, mapped into Tailwind v4 utilities via `@theme inline`.
  *
- * Palette: warm paper white, authority blue, accountant's-ledger gold —
- * not shadcn's default gray, not a generic SaaS purple.
+ * Palette (refreshed this leva, toward something closer to a modern SaaS —
+ * whiter surfaces, more air, real elevation — while keeping the two things
+ * that gave the app its identity: the authority blue and the financial
+ * inflow/outflow semantics):
  *
- *   background / white   #f1f0ec  hsl(48 15% 93.5%)
- *   primary / blue        #01416d  hsl(204 98% 21.6%)
- *   accent / gold         #c99156  hsl(31 52% 56.3%)
- *
- * Neutrals are tilted warm (hue 45-48), derived from the background itself —
- * a pure gray next to this background would read as a mistake, not a choice.
+ *   background / near-white  #fafaf9  hsl(40 20% 98%)
+ *   primary / blue            #01416d  hsl(204 98% 21.6%)
+ *   accent / gold             #c99156  hsl(31 52% 56.3%)
  */
 
 @theme inline {
@@ -50,8 +49,8 @@
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 3px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
@@ -78,29 +77,29 @@
 }
 
 :root {
-  --background: 48 15% 93.5%;
-  --foreground: 204 40% 12%;
-  --card: 48 20% 97%;
-  --card-foreground: 204 40% 12%;
-  --popover: 48 20% 97%;
-  --popover-foreground: 204 40% 12%;
+  --background: 40 20% 98%;
+  --foreground: 204 45% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 204 45% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 204 45% 11%;
   --primary: 204 98% 21.6%;
-  --primary-foreground: 48 15% 93.5%;
-  --secondary: 45 12% 88%;
-  --secondary-foreground: 204 40% 12%;
-  --muted: 45 12% 90%;
-  --muted-foreground: 204 12% 40%;
+  --primary-foreground: 40 20% 98%;
+  --secondary: 40 15% 94%;
+  --secondary-foreground: 204 45% 11%;
+  --muted: 40 15% 95.5%;
+  --muted-foreground: 204 10% 42%;
   --accent: 31 52% 56.3%;
-  --accent-foreground: 204 40% 12%;
-  --destructive: 4 62% 46%;
-  --destructive-foreground: 48 15% 93.5%;
-  --border: 45 10% 84%;
-  --input: 45 10% 84%;
+  --accent-foreground: 204 45% 11%;
+  --destructive: 4 68% 48%;
+  --destructive-foreground: 40 20% 98%;
+  --border: 40 12% 89%;
+  --input: 40 12% 89%;
   --ring: 204 98% 21.6%;
 
-  --inflow: 158 55% 30%;
-  --outflow: 4 62% 46%;
-  --warning: 38 78% 42%;
+  --inflow: 158 58% 28%;
+  --outflow: 4 68% 48%;
+  --warning: 38 82% 40%;
 
   --chart-1: 204 98% 22%;
   --chart-2: 199 55% 38%;
@@ -108,39 +107,39 @@
   --chart-4: 31 52% 56%;
   --chart-5: 20 45% 44%;
 
-  --radius: 0.5rem;
+  --radius: 0.75rem;
 }
 
 .dark {
-  --background: 204 35% 8%;
-  --foreground: 48 15% 93.5%;
-  --card: 204 30% 11%;
-  --card-foreground: 48 15% 93.5%;
-  --popover: 204 30% 11%;
-  --popover-foreground: 48 15% 93.5%;
-  --primary: 204 70% 62%;
-  --primary-foreground: 204 35% 8%;
-  --secondary: 204 20% 16%;
-  --secondary-foreground: 48 15% 93.5%;
-  --muted: 204 20% 16%;
-  --muted-foreground: 204 12% 62%;
-  --accent: 31 60% 62%;
-  --accent-foreground: 204 35% 8%;
-  --destructive: 6 70% 64%;
-  --destructive-foreground: 204 35% 8%;
-  --border: 204 20% 18%;
-  --input: 204 20% 18%;
-  --ring: 204 70% 62%;
+  --background: 204 32% 7%;
+  --foreground: 40 20% 95%;
+  --card: 204 28% 10%;
+  --card-foreground: 40 20% 95%;
+  --popover: 204 28% 10%;
+  --popover-foreground: 40 20% 95%;
+  --primary: 204 75% 65%;
+  --primary-foreground: 204 32% 7%;
+  --secondary: 204 20% 15%;
+  --secondary-foreground: 40 20% 95%;
+  --muted: 204 20% 15%;
+  --muted-foreground: 204 12% 64%;
+  --accent: 31 62% 64%;
+  --accent-foreground: 204 32% 7%;
+  --destructive: 6 72% 66%;
+  --destructive-foreground: 204 32% 7%;
+  --border: 204 18% 18%;
+  --input: 204 18% 18%;
+  --ring: 204 75% 65%;
 
-  --inflow: 158 50% 52%;
-  --outflow: 6 70% 64%;
-  --warning: 38 75% 58%;
+  --inflow: 158 50% 54%;
+  --outflow: 6 72% 66%;
+  --warning: 38 78% 60%;
 
-  --chart-1: 204 80% 60%;
-  --chart-2: 199 55% 55%;
-  --chart-3: 190 35% 60%;
-  --chart-4: 31 60% 62%;
-  --chart-5: 20 50% 55%;
+  --chart-1: 204 80% 62%;
+  --chart-2: 199 55% 56%;
+  --chart-3: 190 35% 62%;
+  --chart-4: 31 62% 64%;
+  --chart-5: 20 52% 58%;
 }
 
 body {

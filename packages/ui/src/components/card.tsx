@@ -4,16 +4,21 @@ import { cn } from "../lib/cn";
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("border-border bg-card text-card-foreground rounded-lg border", className)}>
+    <div
+      className={cn(
+        "border-border bg-card text-card-foreground rounded-lg border shadow-sm",
+        className,
+      )}
+    >
       {children}
     </div>
   );
 }
 
-export function CardHeader({ title, action }: { title: string; action?: ReactNode }) {
+export function CardHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
-    <div className="border-border flex items-center justify-between border-b px-4 py-3">
-      <h2 className="text-sm font-semibold">{title}</h2>
+    <div className="border-border flex items-center justify-between gap-3 border-b px-4 py-3">
+      <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold">{title}</h2>
       {action}
     </div>
   );
