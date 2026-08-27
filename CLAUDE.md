@@ -8,6 +8,12 @@ sua sogra, que opera a contabilidade da empresa.
 Este arquivo é o resumo de estado do projeto — escrito para sobreviver a um
 `/clear` de contexto. Leia antes de continuar qualquer trabalho aqui.
 
+Lucas normalmente programa pelo iPad ou iPhone — sem terminal/editor de
+arquivo à mão pra abrir o repo direto. Qualquer coisa que ele precise copiar
+(uma migration pra colar no SQL Editor do Supabase, um trecho de SQL/config)
+tem que vir no corpo da mensagem, pronta pra copiar — nunca só "está no
+arquivo X" ou um caminho de arquivo sem o conteúdo junto.
+
 ## Stack e estrutura
 
 pnpm + Turborepo monorepo:
@@ -35,7 +41,9 @@ no SQL, `hasRole`/`ROLE_LABELS` em `packages/db/src/types.ts`).
 
 - **Migrations**: `supabase/migrations/YYYYMMDDHHMMSS_nome.sql`, sempre
   crescente. Nunca editar uma migration já aplicada em produção — sempre uma
-  nova.
+  nova. **Sempre mandar o SQL completo da migration no corpo da mensagem**
+  (não só o caminho do arquivo) assim que ela for criada/alterada — é assim
+  que o Lucas cola no SQL Editor do Supabase em produção, do iPad/iPhone.
 - **RPCs** (SECURITY INVOKER, `set search_path = public, pg_temp`): validam
   tudo com `raise exception` de mensagem clara em português ANTES de escrever
   — nunca deixar RLS falhar "por baixo" com mensagem genérica.
