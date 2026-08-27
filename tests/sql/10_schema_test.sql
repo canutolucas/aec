@@ -356,6 +356,16 @@ reset role;
 \echo '== Trava de mes fechado =='
 set role authenticated;
 
+-- close_month agora checa o papel do CHAMADOR antes de escrever (20250101001700):
+-- sem esta checagem, um assistente so descobriria que nao pode fechar o mes
+-- quando o INSERT em monthly_closings esbarrasse na RLS, com a mensagem
+-- generica do Postgres em vez de uma frase clara em portugues.
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.close_month('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2025-03-01')$q$,
+  'assistente nao consegue fechar o mes (precisa de contador ou responsavel)'
+); end $$;
+
 do $$
 begin
   perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
@@ -412,6 +422,14 @@ do $$ begin perform pg_temp.expect_denied(
   '11111111-1111-1111-1111-111111111111',
   $q$select public.reopen_month('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2025-03-01', '')$q$,
   'reabertura sem motivo e recusada'
+); end $$;
+
+-- Mesma checagem explicita de papel que close_month ganhou: cliente_leitura
+-- (abaixo de contador) nao reabre o mes mesmo informando motivo valido.
+do $$ begin perform pg_temp.expect_denied(
+  '33333333-3333-3333-3333-333333333333',
+  $q$select public.reopen_month('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2025-03-01', 'Motivo valido')$q$,
+  'cliente_leitura nao consegue reabrir o mes'
 ); end $$;
 
 do $$
@@ -903,7 +921,10 @@ do $$ begin perform pg_temp.expect_denied(
   'settle_invoices recusa alocacao acima do saldo em aberto da nota'
 ); end $$;
 
--- cliente_leitura nao pode dar baixa (RLS de invoice_settlements exige assistente+).
+-- cliente_leitura nao pode dar baixa: settle_invoices agora checa o papel
+-- explicitamente (20250101001700), antes mesmo de olhar a nota ou o
+-- lancamento -- RLS de invoice_settlements (assistente+) continua sendo a
+-- garantia real, isto so prova a mensagem clara chegando primeiro.
 do $$ begin perform pg_temp.expect_denied(
   '33333333-3333-3333-3333-333333333333',
   $q$select public.settle_invoices('f2000000-0000-0000-0000-000000000001',
