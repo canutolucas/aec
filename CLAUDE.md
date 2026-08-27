@@ -100,10 +100,34 @@ client-side ANTES de tentar enviar (`parse-file.ts`), não só confiar que o
 
 ### Conciliação bancária (núcleo original)
 
-Importa extrato (OFX/CSV/PDF do Cora), casa com lançamentos existentes ou cria
-novo lançamento (`create_transaction_from_line`), aprende regras de
+Importa extrato (OFX, CSV ou PDF do Cora), casa com lançamentos existentes ou
+cria novo lançamento (`create_transaction_from_line`), aprende regras de
 categorização (`matching_rules`), fecha/reabre mês
 (`close_month`/`reopen_month`), auditoria completa.
+
+**OFX e CSV já funcionam pra qualquer banco** — Cora, Bradesco, Caixa, o que
+for (`packages/statements/src/universal/`, roda no navegador, sem parser
+específico por banco). **PDF, hoje, só entende o layout do Cora**
+(`packages/statements/src/node/cora.ts`) — não é uma limitação proposital
+contra outros bancos, é que só existe leitor pra um layout até agora, e um
+leitor de PDF por banco só pode ser construído (com segurança pra dado
+financeiro) contra uma amostra real daquele banco, validada com um teste que
+soma tudo e bate contra o saldo declarado — exatamente como o Cora foi
+validado (ver `packages/statements/tests/local/README.md`).
+
+Descoberta desta sessão, testando um PDF real da Caixa (enviado pelo
+WhatsApp): o PDF não tinha NENHUM texto — `pdfinfo`/`pdftotext` (poppler) e
+`unpdf` (o motor que o sistema usa) concordam nisso, e a estrutura interna do
+arquivo confirma por quê — cada página é uma imagem JPEG embutida
+(`/Subtype /Image`, `/Filter /DCTDecode`) dentro de um PDF montado por
+`pdfmake`, não texto de verdade. Um leitor por posição de texto (a técnica
+que o Cora usa) **não tem como ler esse arquivo**, de nenhum banco — não é
+questão de escrever mais regex, é que não há texto ali pra ler. A alternativa
+seria OCR (imagem → texto), que é uma tecnologia bem mais arriscada pra dado
+financeiro (erra dígito) e não está implementada. Se um dia aparecer um PDF
+de Caixa/Bradesco/outro banco com texto selecionável de verdade (confirma
+tentando marcar/copiar o texto num leitor de PDF comum), um leitor dedicado
+pra esse banco pode ser construído do mesmo jeito rigoroso que o do Cora.
 
 A tela avançada (`/conciliacao`) já roda `autoApplyReconciliation` — o mesmo
 domínio que o modo simples usa — logo depois de importar o extrato, e
@@ -311,6 +335,14 @@ validação do parser contra XML real.
 - O parser de NFS-e foi validado contra UM município real (Salvador/BA,
   ABRASF v1). Um XML de outra prefeitura pode expor variações de layout ainda
   não cobertas pelos sinônimos de tag em `nfse.ts`.
+- **PDF de banco além do Cora**: o escritório usa vários bancos (Bradesco,
+  Caixa, etc.), e OFX/CSV já cobrem qualquer um deles — só PDF é Cora-only
+  hoje (ver "Conciliação bancária" acima pro porquê e o que destrava um
+  leitor novo). Pendente: usuário vai tentar exportar OFX da Caixa pelo
+  internet banking (Extrato → Exportar/Download → formato OFX, às vezes
+  rotulado "Money") como caminho imediato; se algum banco só oferecer PDF
+  com texto de verdade (não imagem, como o testado nesta sessão), mandar uma
+  amostra pra construir o leitor dedicado.
 
 ## Branch
 
