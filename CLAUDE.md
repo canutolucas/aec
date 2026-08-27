@@ -90,6 +90,16 @@ novo lançamento (`create_transaction_from_line`), aprende regras de
 categorização (`matching_rules`), fecha/reabre mês
 (`close_month`/`reopen_month`), auditoria completa.
 
+A tela avançada (`/conciliacao`) já roda `autoApplyReconciliation` — o mesmo
+domínio que o modo simples usa — logo depois de importar o extrato, e
+também expõe um botão "Aplicar automaticamente" pra reaplicar em qualquer
+momento (útil pra um backlog de linhas de uma importação anterior). Antes,
+essa tela nunca chamava auto-apply: toda linha, mesmo pareamento exato ou
+regra já aprendida com categoria, esperava um clique manual de
+"Confirmar"/"Criar lançamento" uma por uma. Só continua manual o que o
+sistema genuinamente não tem certeza (sugestão fraca, linha sem categoria) —
+mesmo corte de confiança do modo simples.
+
 ### Modo simples (`memberships.simple_mode`)
 
 Uma tela única (`/inicio`): sobe o extrato → o sistema tenta resolver tudo

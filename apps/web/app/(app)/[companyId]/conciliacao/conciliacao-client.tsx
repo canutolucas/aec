@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import {
+  autoApplyReconciliation,
   createMatchingRule,
   createTransactionFromLine,
   ignoreLine,
@@ -163,15 +164,65 @@ export function ReconciliationClient({
         fileName,
         payload: statementToImportPayload(statement),
       });
-      setFeedback(
-        result.ok
-          ? { text: "Extrato importado. Revise os pareamentos abaixo.", tone: "success" }
-          : { text: result.error ?? "Nao foi possivel importar o extrato.", tone: "error" },
-      );
-      if (result.ok) {
-        setStatement(null);
-        router.refresh();
+      if (!result.ok) {
+        setFeedback({
+          text: result.error ?? "Nao foi possivel importar o extrato.",
+          tone: "error",
+        });
+        return;
       }
+      setStatement(null);
+
+      // Sem isto, toda linha do extrato (mesmo pareamento exato ou regra ja
+      // aprendida com categoria) ficava esperando um clique manual de
+      // "Confirmar"/"Criar lancamento" uma por uma — o mesmo
+      // autoApplyReconciliation que o modo simples ja usa resolve sozinho o
+      // que o sistema ja tem certeza; so sobra revisao manual pro que
+      // realmente precisa de decisao humana.
+      const applied = await autoApplyReconciliation({ companyId, bankAccountId: accountId });
+      const parts: string[] = [];
+      if (applied.ok) {
+        if ((applied.reconciled ?? 0) > 0) {
+          parts.push(`${applied.reconciled} pareamento(s) confirmado(s) automaticamente`);
+        }
+        if ((applied.created ?? 0) > 0) {
+          parts.push(`${applied.created} lançamento(s) criado(s) automaticamente`);
+        }
+      }
+      const suffix = parts.length > 0 ? ` ${parts.join(" e ")}.` : "";
+      setFeedback({
+        text: `Extrato importado.${suffix} Revise o que sobrou abaixo.`,
+        tone: "success",
+      });
+      router.refresh();
+    });
+  }
+
+  function runAutoApply() {
+    startTransition(async () => {
+      const result = await autoApplyReconciliation({ companyId, bankAccountId: accountId });
+      if (!result.ok) {
+        setFeedback({
+          text: result.error ?? "Nao foi possivel aplicar automaticamente.",
+          tone: "error",
+        });
+        return;
+      }
+      const parts: string[] = [];
+      if ((result.reconciled ?? 0) > 0) {
+        parts.push(`${result.reconciled} pareamento(s) confirmado(s)`);
+      }
+      if ((result.created ?? 0) > 0) parts.push(`${result.created} lançamento(s) criado(s)`);
+      const failedCount = result.exceptions?.failed.length ?? 0;
+      setFeedback({
+        text:
+          parts.length > 0
+            ? `Aplicado automaticamente: ${parts.join(" e ")}.` +
+              (failedCount > 0 ? ` ${failedCount} não pôde(pôderam) ser aplicado(s).` : "")
+            : "Nada que o sistema já tenha certeza para aplicar agora.",
+        tone: failedCount > 0 ? "warn" : "success",
+      });
+      router.refresh();
     });
   }
 
@@ -423,7 +474,27 @@ export function ReconciliationClient({
       )}
 
       <Card>
-        <CardHeader title={`Sugestões de conciliação (${suggestions.length})`} />
+        <CardHeader
+          title={`Sugestões de conciliação (${suggestions.length})`}
+          action={
+            (suggestions.length > 0 || unmatchedLines.length > 0) && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={runAutoApply}
+                disabled={!canEdit || isPending}
+              >
+                Aplicar automaticamente
+              </Button>
+            )
+          }
+        />
+        {(suggestions.length > 0 || unmatchedLines.length > 0) && (
+          <p className="text-muted-foreground px-4 pt-3 text-xs">
+            Confirma pareamento exato e cria lançamento onde já existe regra com categoria — nas
+            duas seções abaixo. Só fica pra revisar na mão o que o sistema não tem certeza.
+          </p>
+        )}
         {suggestions.length === 0 ? (
           <EmptyState
             title="Nenhuma sugestão pendente"
