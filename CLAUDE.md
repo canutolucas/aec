@@ -81,6 +81,21 @@ no SQL, `hasRole`/`ROLE_LABELS` em `packages/db/src/types.ts`).
   que apontaria para ela usa FK simples por `id`, com o `company_id` conferido
   na própria RPC.
 
+## Gotcha de Next.js descoberto nesta sessão
+
+Server Action com corpo grande (o PDF do Cora vai inteiro em base64 pro
+servidor, ~33% maior que o arquivo — `unpdf` só roda em Node, não dá pra
+parsear no navegador) **estourava o limite padrão de 1mb do Next antes da
+própria função rodar** — o `try/catch` de dentro da Server Action nunca
+chegava a executar, e o cliente via um erro cru do React (minificado, tipo
+"#441") em vez da mensagem amigável que
+`parsePdfStatement` já devolve pra PDF inválido ou de outro banco.
+`experimental.serverActions.bodySizeLimit` em `next.config.ts` resolve — mas
+qualquer Server Action nova que receba arquivo binário grande (base64,
+upload) precisa lembrar do mesmo limite, e do mesmo padrão de recusar
+client-side ANTES de tentar enviar (`parse-file.ts`), não só confiar que o
+`catch` do lado do servidor vai pegar.
+
 ## Funcionalidades — o que já existe e funciona
 
 ### Conciliação bancária (núcleo original)

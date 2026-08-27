@@ -19,6 +19,17 @@ export type ParsedFileResult =
   | { readonly ok: true; readonly statement: CanonicalStatement }
   | { readonly ok: false; readonly error: string };
 
+/**
+ * O PDF vai inteiro em base64 (~33% maior) no corpo da Server Action de
+ * parsePdfStatement (actions.ts), cujo limite esta configurado em 8mb em
+ * next.config.ts. Recusar aqui, antes de tentar enviar, evita que um
+ * arquivo grande demais estoure esse limite no meio do caminho — isso
+ * derrubava a chamada com um erro cru do React em vez da mensagem amigavel
+ * que a acao devolve pra PDF invalido. So vale pra PDF: OFX/CSV sao lidos
+ * inteiramente no navegador, sem passar pelo servidor.
+ */
+const MAX_PDF_BYTES = 6 * 1024 * 1024;
+
 /** Converts a File into the base64 string the PDF server action expects. */
 async function fileToBase64(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
@@ -37,6 +48,12 @@ export async function parseStatementFile(companyId: string, file: File): Promise
   try {
     const isPdf = /\.pdf$/i.test(file.name);
     if (isPdf) {
+      if (file.size > MAX_PDF_BYTES) {
+        return {
+          ok: false,
+          error: `Este PDF tem ${(file.size / (1024 * 1024)).toFixed(1)}MB, acima do limite de ${MAX_PDF_BYTES / (1024 * 1024)}MB. Se for um extrato do Cora, peça um período menor; qualquer outro banco, exporte em OFX — funciona pra qualquer tamanho.`,
+        };
+      }
       const base64 = await fileToBase64(file);
       const result = await parsePdfStatement(companyId, base64);
       return result.ok
