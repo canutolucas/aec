@@ -1,4 +1,4 @@
-import type { AccountBalance, Transaction } from "@aec/db";
+import type { AccountBalance, MonthlyClosing, Transaction } from "@aec/db";
 import { addDays, startOfMonth, todayInBrazil } from "@aec/domain";
 import { fromDb, sum } from "@aec/domain";
 import { project } from "@aec/domain";
@@ -24,30 +24,46 @@ export default async function PainelPage({ params }: { params: Promise<{ company
 
   const supabase = await createServerSupabase();
 
-  const [saldosResult, previstosResult, doMesResult, notasResult] = await Promise.all([
-    supabase.from("v_account_balances").select("*").eq("company_id", companyId).order("name"),
-    // Inclui previstos vencidos (anteriores a hoje): eles continuam para pagar e
-    // a projecao os traz para o primeiro dia em vez de ignora-los.
-    supabase
-      .from("transactions")
-      .select("*")
-      .eq("company_id", companyId)
-      .eq("status", "previsto")
-      .lte("booking_date", fimDoHorizonte)
-      .order("booking_date"),
-    supabase
-      .from("transactions")
-      .select("*")
-      .eq("company_id", companyId)
-      .eq("status", "realizado")
-      .gte("booking_date", inicioDoMes)
-      .lte("booking_date", hoje),
-    supabase
-      .from("v_invoice_balances")
-      .select("outstanding_amount")
-      .eq("company_id", companyId)
-      .gt("outstanding_amount", 0),
-  ]);
+  const [saldosResult, previstosResult, doMesResult, notasResult, fechamentoResult, linhasResult] =
+    await Promise.all([
+      supabase.from("v_account_balances").select("*").eq("company_id", companyId).order("name"),
+      // Inclui previstos vencidos (anteriores a hoje): eles continuam para pagar e
+      // a projecao os traz para o primeiro dia em vez de ignora-los.
+      supabase
+        .from("transactions")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("status", "previsto")
+        .lte("booking_date", fimDoHorizonte)
+        .order("booking_date"),
+      supabase
+        .from("transactions")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("status", "realizado")
+        .gte("booking_date", inicioDoMes)
+        .lte("booking_date", hoje),
+      supabase
+        .from("v_invoice_balances")
+        .select("outstanding_amount")
+        .eq("company_id", companyId)
+        .gt("outstanding_amount", 0),
+      supabase
+        .from("monthly_closings")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("period", inicioDoMes)
+        .maybeSingle(),
+      // Linhas do extrato ainda sem tratamento (nao viraram lancamento nem
+      // foram casadas) — uma populacao diferente do "lancamento sem
+      // conciliar" abaixo. As duas contagens de /conciliacao, lado a lado
+      // aqui, pra nao existir um numero ambiguo de "quanto falta".
+      supabase
+        .from("statement_lines")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId)
+        .eq("status", "pendente"),
+    ]);
 
   for (const result of [saldosResult, previstosResult, doMesResult, notasResult]) {
     if (result.error) throw result.error;
@@ -57,6 +73,13 @@ export default async function PainelPage({ params }: { params: Promise<{ company
   const previstos = (previstosResult.data ?? []) as Transaction[];
   const doMes = (doMesResult.data ?? []) as Transaction[];
   const aReceber = sum((notasResult.data ?? []).map((row) => fromDb(row.outstanding_amount)));
+  // Melhor esforco: mes fechado e linhas pendentes sao avisos informativos,
+  // nao travam o resto do painel se a consulta falhar.
+  const fechamento = fechamentoResult.error
+    ? null
+    : (fechamentoResult.data as MonthlyClosing | null);
+  const mesFechado = Boolean(fechamento?.locked_at);
+  const linhasPendentes = linhasResult.error ? 0 : (linhasResult.count ?? 0);
 
   const saldoAtual = sum(contas.map((conta) => fromDb(conta.current_balance)));
   const aConciliar = contas.reduce((total, conta) => total + Number(conta.unreconciled_count), 0);
@@ -128,9 +151,33 @@ export default async function PainelPage({ params }: { params: Promise<{ company
         </Alert>
       )}
 
-      {aConciliar > 0 && (
+      {mesFechado && (
+        <Alert tone="warn" title={`${formatMonth(inicioDoMes)} esta fechado`}>
+          Lancamentos deste mes nao podem ser alterados nem excluidos.{" "}
+          <Link
+            href={routes.transactions(companyId, { month: inicioDoMes })}
+            className="underline underline-offset-2 hover:no-underline"
+          >
+            Ver em Lancamentos
+          </Link>
+        </Alert>
+      )}
+
+      {(aConciliar > 0 || linhasPendentes > 0) && (
         <Alert tone="info">
-          {aConciliar} lancamento(s) ainda nao conciliados com o extrato do banco.
+          {aConciliar > 0 && (
+            <>
+              {aConciliar} lancamento(s) ainda nao conciliados com o extrato do banco
+              {linhasPendentes > 0 ? "; " : "."}
+            </>
+          )}
+          {linhasPendentes > 0 && <>{linhasPendentes} linha(s) do extrato aguardando tratamento.</>}{" "}
+          <Link
+            href={routes.reconciliation(companyId)}
+            className="underline underline-offset-2 hover:no-underline"
+          >
+            Ver em Conciliacao
+          </Link>
         </Alert>
       )}
 
