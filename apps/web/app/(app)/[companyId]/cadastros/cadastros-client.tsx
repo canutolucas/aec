@@ -38,6 +38,8 @@ import {
   desativarRegra,
 } from "@/lib/db/cadastros";
 
+import { RegrasList } from "./regras-list";
+
 interface Feedback {
   readonly text: string;
   readonly tone: "success" | "error";
@@ -185,48 +187,15 @@ export function CadastrosClient({
 
       <Card>
         <CardHeader title={`Regras de categorizacao aprendidas (${matchingRules.length})`} />
-        {matchingRules.length === 0 ? (
-          <EmptyState
-            title="Nenhuma regra ainda"
-            description={
-              'Regras nascem na tela de Conciliacao: ao criar um lancamento a partir de uma linha do extrato, marque "Salvar como regra".'
-            }
-          />
-        ) : (
-          <div className="divide-border divide-y">
-            {matchingRules.map((rule) => (
-              <div
-                key={rule.id}
-                className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="grid gap-1 text-sm">
-                  <p className="font-medium">
-                    Memo contem &ldquo;{rule.match_text}&rdquo;
-                    {rule.category_id && categoryNameById.has(rule.category_id) && (
-                      <> → {categoryNameById.get(rule.category_id)}</>
-                    )}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    Aplicada {rule.hit_count} {rule.hit_count === 1 ? "vez" : "vezes"} · prioridade{" "}
-                    {rule.priority}
-                  </p>
-                </div>
-                {canEditOperational && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={isPending}
-                    onClick={() =>
-                      runAction(() => desativarRegra(companyId, rule.id), "Regra desativada.")
-                    }
-                  >
-                    Desativar
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        <RegrasList
+          matchingRules={matchingRules}
+          categoryNameById={categoryNameById}
+          canEdit={canEditOperational}
+          disabled={isPending}
+          onDeactivate={(rule) =>
+            runAction(() => desativarRegra(companyId, rule.id), "Regra desativada.")
+          }
+        />
       </Card>
     </div>
   );

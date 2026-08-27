@@ -1,4 +1,4 @@
-import { type BankAccount, type Category, hasRole } from "@aec/db";
+import { type BankAccount, type Category, hasRole, listMatchingRules } from "@aec/db";
 import { fromDb, type IsoDate } from "@aec/domain";
 import { Card, CardHeader } from "@aec/ui";
 
@@ -20,32 +20,37 @@ export default async function InicioPage({ params }: { params: Promise<{ company
   const session = await requireCompany(companyId);
   const supabase = await createServerSupabase();
 
-  const [accountsResult, categoriesResult, lastImportResult, invoicesResult] = await Promise.all([
-    supabase
-      .from("bank_accounts")
-      .select("id, name, bank_name")
-      .eq("company_id", companyId)
-      .eq("is_active", true)
-      .order("name"),
-    supabase
-      .from("categories")
-      .select("*")
-      .eq("company_id", companyId)
-      .eq("is_active", true)
-      .order("name"),
-    supabase
-      .from("statement_imports")
-      .select("created_at, file_name")
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("v_invoice_balances")
-      .select("issued_on, outstanding_amount")
-      .eq("company_id", companyId)
-      .gt("outstanding_amount", 0),
-  ]);
+  const [accountsResult, categoriesResult, lastImportResult, invoicesResult, matchingRules] =
+    await Promise.all([
+      supabase
+        .from("bank_accounts")
+        .select("id, name, bank_name")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .order("name"),
+      supabase
+        .from("categories")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .order("name"),
+      supabase
+        .from("statement_imports")
+        .select("created_at, file_name")
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("v_invoice_balances")
+        .select("issued_on, outstanding_amount")
+        .eq("company_id", companyId)
+        .gt("outstanding_amount", 0),
+      // listMatchingRules lanca em erro (ao contrario dos demais acima, que
+      // devolvem {data, error}) — .catch aqui preserva o mesmo "melhor
+      // esforco" do resto deste card: uma falha nao derruba a pagina inteira.
+      listMatchingRules(supabase, companyId).catch(() => []),
+    ]);
 
   if (accountsResult.error) throw accountsResult.error;
   if (categoriesResult.error) throw categoriesResult.error;
@@ -108,6 +113,22 @@ export default async function InicioPage({ params }: { params: Promise<{ company
               </>
             ) : (
               "Nenhuma nota fiscal vencida."
+            )}
+          </p>
+          <p className="text-sm">
+            {matchingRules.length > 0 ? (
+              <>
+                <span className="font-medium">{matchingRules.length}</span> regra(s) automatica(s)
+                ativa(s).{" "}
+                <a
+                  href={routes.rules(companyId)}
+                  className="underline underline-offset-2 hover:no-underline"
+                >
+                  Ver e gerenciar
+                </a>
+              </>
+            ) : (
+              "Nenhuma regra automatica ativa ainda."
             )}
           </p>
         </div>

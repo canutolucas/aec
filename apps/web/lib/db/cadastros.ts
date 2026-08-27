@@ -146,5 +146,7 @@ export async function desativarRegra(companyId: string, id: string): Promise<Act
 
   revalidatePath(`/${companyId}/cadastros`);
   revalidatePath(`/${companyId}/conciliacao`);
+  revalidatePath(`/${companyId}/regras`);
+  revalidatePath(`/${companyId}/inicio`);
   return OK;
 }
