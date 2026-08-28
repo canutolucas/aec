@@ -366,14 +366,55 @@ aquele valor" (Fase 1d, feita nesta leva).
   montar a tela — agora precisa de um clique explícito ("Buscar e organizar
   recebimentos") antes de dar baixa em qualquer nota.
 
-**Pendente do plano geral** (próximas levas — ver "Pendências reais"):
-Fase 2 (perfis/lentes de contas + unificar `simpleMode` numa interface só e
-navegação), Fase 3 (vocabulário/microcopy — "pareamento" → "correspondência",
-etc.), Fase 4 (assistente de primeiro uso + seed de categorias em
-`create_company`), Fase 5 (relatório por categoria, centro de custo/
-contraparte, transferência entre contas, cancelar nota importada por engano,
-paginação). O plano completo com todo o levantamento vive só na conversa —
-não há arquivo de plano versionado no repo.
+**Fase 2a — perfis de contas (lentes gerenciais), completa nesta leva.**
+Segundo pedido direto da usuária: agrupar contas bancárias sob um nome
+("Serviços por fora", "Contábil empresarial") e ver o app filtrado por essa
+lente — uma, várias, ou todas de uma vez. Confirmado com o dono do projeto
+que hoje todas as contas estão numa única empresa, então a fase seguiu o
+desenho original (perfil como filtro N:N sobre `bank_accounts`, não uma
+segunda fronteira de empresa).
+
+- **Schema** (`20250101001800_account_profiles.sql`): `account_profiles` +
+  `account_profile_accounts` (N:N — a mesma conta pode estar em mais de um
+  perfil), RLS leitura para qualquer membro / escrita a partir de
+  `contador`, no mesmo padrão de `bank_accounts`. Nome `AccountProfile` no
+  lado TS para não colidir com a tabela `profiles` que já existe (espelho
+  de `auth.users`). Duas RPCs SECURITY INVOKER (`create_account_profile`,
+  `set_account_profile_accounts`) fazem a escrita composta (perfil+vínculo,
+  ou trocar o conjunto de contas) numa transação só — diferente de
+  `accounts.ts`/`cadastros.ts`, que escrevem direto na tabela porque lá é
+  sempre uma linha só.
+- **Bug corrigido em `generate-types.mjs`**: um argumento de RPC do tipo
+  array (`uuid[]`) virava `string` no tipo gerado — nenhuma RPC anterior
+  deste projeto tinha argumento array pra expor isso antes das duas acima.
+- **Seletor global** (`PerfilSelector`, no cabeçalho de toda tela avançada):
+  multi-seleção, "Todos os perfis" marcado por padrão, escolha vive em
+  `?perfil=` (compartilhável, sobrevive a refresh) via
+  `apps/web/lib/ui/account-profiles.ts` (`resolvePerfilSelecao`). Só
+  aparece quando a empresa já tem algum perfil cadastrado. `Popover` novo
+  em `packages/ui` para isso — o Radix já era dependência desde a Fase 1a,
+  faltava o wrapper.
+- **Gestão dos perfis**: card novo em `/contas` (criar, editar contas,
+  renomear, arquivar — soft delete como categorias/contrapartes). Fica
+  junto de Contas por ora; muda pra "Ajustes" quando a Fase 2b criar essa
+  tela.
+- **Filtro aplicado** em `/lancamentos`, `/conciliacao`, `/relatorios` e
+  `/painel`: quando há perfil selecionado e nenhum filtro de conta única
+  mais específico já escolhido na própria tela, só entram
+  lançamentos/linhas/saldos das contas daquela lente. Fechamento de mês e
+  NFS-e continuam por empresa, de propósito — perfil é lente de leitura,
+  não uma segunda fronteira. `/hoje` ainda não foi filtrada por perfil
+  (mostra o estado do ciclo mensal da empresa inteira, não uma métrica
+  quebrada por conta) — candidato a revisitar se a usuária pedir.
+
+**Pendente do plano geral** (próximas levas — ver "Pendências reais"): Fase
+2b (unificar `simpleMode` numa interface só e a navegação), Fase 3
+(vocabulário/microcopy — "pareamento" → "correspondência", etc.), Fase 4
+(assistente de primeiro uso + seed de categorias em `create_company`), Fase
+5 (relatório por categoria, centro de custo/contraparte, transferência
+entre contas, cancelar nota importada por engano, paginação). O plano
+completo com todo o levantamento vive só na conversa — não há arquivo de
+plano versionado no repo.
 
 ## Fases do projeto — o que falta
 
@@ -397,15 +438,13 @@ validação do parser contra XML real.
 
 ## Pendências reais
 
-- **Reforma de UI/UX — Fases 2 a 5**: a Fase 1 (fluxo do dia a dia — telas
-  Hoje/Revisar, painel de detalhe do lançamento, design system novo, dark
-  mode) está completa, ver seção acima. Falta: Fase 2 (perfis/lentes de
-  contas — checar antes se todas as contas estão numa única empresa, senão a
-  fase precisa ser replanejada; e unificar `simpleMode` numa interface só),
-  Fase 3 (vocabulário/microcopy), Fase 4 (assistente de primeiro uso + seed
-  de categorias em `create_company`), Fase 5 (relatório por categoria,
-  centro de custo/contraparte, transferência entre contas, cancelar nota
-  importada por engano, paginação).
+- **Reforma de UI/UX — Fases 2b a 5**: Fase 1 (fluxo do dia a dia) e Fase 2a
+  (perfis de contas) estão completas, ver seção acima. Falta: Fase 2b
+  (unificar `simpleMode` numa interface só e a navegação), Fase 3
+  (vocabulário/microcopy), Fase 4 (assistente de primeiro uso + seed de
+  categorias em `create_company`), Fase 5 (relatório por categoria, centro
+  de custo/contraparte, transferência entre contas, cancelar nota importada
+  por engano, paginação).
 - **Web mobile**: alvo de toque e menu dedicado (barra de abas) já feitos —
   ver seção acima. Falta só testar de verdade num aparelho; este sandbox não
   tem `docker` (`docker ps` falha), então não dá pra subir Supabase local e
@@ -429,8 +468,9 @@ validação do parser contra XML real.
   permite, mas nenhum botão chama).
 - Toda migration nova precisa ser colada manualmente pelo usuário no SQL
   Editor do Supabase em produção — este sandbox não tem acesso ao banco real.
-  A migration mais recente (`20250101001700_role_checks_rpc.sql`) **já foi
-  aplicada** pelo usuário.
+  A migration mais recente (`20250101001800_account_profiles.sql`) **ainda
+  não foi aplicada** — ver o corpo da mensagem que a introduziu para o SQL
+  completo.
 - O parser de NFS-e foi validado contra UM município real (Salvador/BA,
   ABRASF v1). Um XML de outra prefeitura pode expor variações de layout ainda
   não cobertas pelos sinônimos de tag em `nfse.ts`.
