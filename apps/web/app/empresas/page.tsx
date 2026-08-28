@@ -59,7 +59,7 @@ export default async function EmpresasPage() {
                     {ROLE_LABELS[company.role]}
                   </p>
                 </div>
-                <LinkButton href={routes.dashboard(company.id)}>Abrir</LinkButton>
+                <LinkButton href={routes.today(company.id)}>Abrir</LinkButton>
               </li>
             ))}
           </ul>

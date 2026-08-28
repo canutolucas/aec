@@ -78,7 +78,7 @@ export async function requireCompany(companyId: string): Promise<SessionContext>
   if (!company) {
     if (companies.length === 0) redirect(routes.companies);
     const fallback = companies[0]!;
-    redirect(fallback.simpleMode ? routes.home(fallback.id) : routes.dashboard(fallback.id));
+    redirect(routes.today(fallback.id));
   }
 
   return {

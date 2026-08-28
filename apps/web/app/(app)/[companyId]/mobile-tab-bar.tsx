@@ -4,6 +4,7 @@ import { cn } from "@aec/ui";
 import {
   ArrowLeftRight,
   BarChart3,
+  CalendarCheck,
   CheckCheck,
   ClipboardList,
   FileText,
@@ -30,7 +31,7 @@ type Item = { key: string; label: string; href: (id: string) => Route; icon: Luc
  * usuario, nao inferida do codigo (ver plano desta leva).
  */
 const PRINCIPAIS: Item[] = [
-  { key: "painel", label: "Painel", href: routes.dashboard, icon: LayoutDashboard },
+  { key: "hoje", label: "Hoje", href: routes.today, icon: CalendarCheck },
   {
     key: "lancamentos",
     label: "Lancamentos",
@@ -42,6 +43,7 @@ const PRINCIPAIS: Item[] = [
 ];
 
 const MAIS: Item[] = [
+  { key: "painel", label: "Painel", href: routes.dashboard, icon: LayoutDashboard },
   { key: "recebimentos", label: "Recebimentos", href: routes.receivables, icon: HandCoins },
   { key: "contas", label: "Contas", href: routes.accounts, icon: Landmark },
   { key: "relatorios", label: "Relatorios", href: routes.reports, icon: BarChart3 },

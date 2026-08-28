@@ -19,6 +19,8 @@ export const routes = {
   login: "/login" as Route,
   companies: "/empresas" as Route,
 
+  today: (companyId: string) => `/${companyId}/hoje` as Route,
+  reviewQueue: (companyId: string) => `/${companyId}/revisar` as Route,
   dashboard: (companyId: string) => `/${companyId}/painel` as Route,
   home: (companyId: string) => `/${companyId}/inicio` as Route,
   accounts: (companyId: string) => `/${companyId}/contas` as Route,

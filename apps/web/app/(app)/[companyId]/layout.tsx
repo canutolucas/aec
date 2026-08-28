@@ -1,5 +1,5 @@
 import { hasRole, ROLE_LABELS } from "@aec/db";
-import { cn, Logo } from "@aec/ui";
+import { cn, Logo, ThemeToggle } from "@aec/ui";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -10,6 +10,7 @@ import { routes } from "@/lib/ui/routes";
 import { MobileTabBar } from "./mobile-tab-bar";
 
 const NAV = [
+  { key: "hoje", label: "Hoje", href: routes.today },
   { key: "painel", label: "Painel", href: routes.dashboard },
   { key: "lancamentos", label: "Lancamentos", href: (id: string) => routes.transactions(id) },
   { key: "contas", label: "Contas", href: routes.accounts },
@@ -39,6 +40,7 @@ const NAV = [
  */
 function simpleNav(role: Parameters<typeof hasRole>[0]) {
   const base = [
+    { key: "hoje", label: "Hoje", href: routes.today },
     { key: "inicio", label: "Inicio", href: routes.home },
     { key: "faturamento", label: "Faturamento", href: routes.invoices },
     { key: "recebimentos", label: "Recebimentos", href: routes.receivables },
@@ -78,6 +80,7 @@ export default async function CompanyLayout({
           </div>
 
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             {session.companies.length > 1 && (
               <Link
                 href={routes.companies}
