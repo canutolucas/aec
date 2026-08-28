@@ -22,9 +22,10 @@
  * corrompem se decodificados como UTF-8 direto) — ver `decodeInvoiceXml`.
  */
 
-import { type Cents, fromDb, isIsoDate, type IsoDate } from "@aec/domain";
+import { type Cents, isIsoDate, type IsoDate } from "@aec/domain";
 import { XMLParser } from "fast-xml-parser";
 
+import { parseTolerantAmount } from "./amount";
 import { ImportError } from "./types";
 
 export interface CanonicalInvoice {
@@ -165,25 +166,11 @@ function parseNfseDate(value: string): IsoDate {
 
 /** Mesma tolerância a vírgula/ponto decimal que parseOfxAmount (ofx.ts) — o XSD da NFS-e manda ponto, mas vale ser tolerante. */
 function parseNfseAmount(value: string, field: string): Cents {
-  const raw = value.trim().replace(/\s|R\$/gi, "");
-  if (raw === "") throw new ImportError(`${field} vazio na NFS-e`);
-
-  const lastComma = raw.lastIndexOf(",");
-  const lastDot = raw.lastIndexOf(".");
-  let normalized: string;
-  if (lastComma >= 0 && lastDot >= 0) {
-    normalized =
-      lastComma > lastDot ? raw.replace(/\./g, "").replace(",", ".") : raw.replace(/,/g, "");
-  } else if (lastComma >= 0) {
-    normalized = raw.replace(",", ".");
-  } else {
-    normalized = raw;
-  }
-
-  if (!/^[+-]?\d*\.?\d*$/.test(normalized) || /^[+-]?\.?$/.test(normalized)) {
-    throw new ImportError(`${field} inválido na NFS-e: "${value}"`);
-  }
-  return fromDb(normalized);
+  return parseTolerantAmount(
+    value,
+    `${field} vazio na NFS-e`,
+    `${field} inválido na NFS-e: "${value}"`,
+  );
 }
 
 /** Só dígitos — mesmo formato que counterparties.tax_id e bank_accounts já usam. */
@@ -251,7 +238,11 @@ function findInvoiceEnvelopes(tree: XmlNode): readonly XmlNode[] {
  */
 export function decodeInvoiceXml(bytes: ArrayBuffer): string {
   const head = new TextDecoder("iso-8859-1").decode(bytes.slice(0, 200));
-  const declared = /encoding=["']([\w-]+)["']/i.exec(head)?.[1]?.toLowerCase();
+  // The XML spec's Eq grammar (VersionInfo/EncodingDecl) allows whitespace
+  // around "=" — rare in practice, but a strict "encoding=" match would
+  // silently fall through to UTF-8 (mojibake) for a prolog that spells it
+  // "encoding = \"...\"".
+  const declared = /encoding\s*=\s*["']([\w-]+)["']/i.exec(head)?.[1]?.toLowerCase();
   try {
     return new TextDecoder(declared ?? "utf-8").decode(bytes);
   } catch {

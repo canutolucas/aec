@@ -21,8 +21,9 @@
  * of the codebase.
  */
 
-import { type Cents, fromDb, isIsoDate, type IsoDate, sum } from "@aec/domain";
+import { type Cents, isIsoDate, type IsoDate, sum } from "@aec/domain";
 
+import { parseTolerantAmount } from "./amount";
 import { assignDedupKeys } from "./dedup";
 import {
   type CanonicalLine,
@@ -175,29 +176,7 @@ export function parseOfxDate(value: string): IsoDate {
  * decimal.
  */
 export function parseOfxAmount(value: string): Cents {
-  const raw = value.trim().replace(/\s|R\$/gi, "");
-  if (raw === "") {
-    throw new ImportError("Valor OFX vazio");
-  }
-
-  const lastComma = raw.lastIndexOf(",");
-  const lastDot = raw.lastIndexOf(".");
-
-  let normalized: string;
-  if (lastComma >= 0 && lastDot >= 0) {
-    normalized =
-      lastComma > lastDot ? raw.replace(/\./g, "").replace(",", ".") : raw.replace(/,/g, "");
-  } else if (lastComma >= 0) {
-    normalized = raw.replace(",", ".");
-  } else {
-    normalized = raw;
-  }
-
-  if (!/^[+-]?\d*\.?\d*$/.test(normalized) || /^[+-]?\.?$/.test(normalized)) {
-    throw new ImportError(`Valor OFX inválido: "${value}"`);
-  }
-
-  return fromDb(normalized.replace(/^\+/, ""));
+  return parseTolerantAmount(value, "Valor OFX vazio", `Valor OFX inválido: "${value}"`);
 }
 
 /**

@@ -200,4 +200,10 @@ describe("parseNfse — tolerancia e casos de borda", () => {
     const invoice = parseOne(xml);
     expect(invoice.amount).toBe(fromDb("1234.56"));
   });
+
+  it("tolera valor com sinal de + explicito (nao vira erro desconhecido)", () => {
+    const xml = `<Nfse><Numero>10</Numero><DataEmissao>2025-04-01</DataEmissao><ValorServicos>+150,00</ValorServicos></Nfse>`;
+    const invoice = parseOne(xml);
+    expect(invoice.amount).toBe(fromDb("150.00"));
+  });
 });
