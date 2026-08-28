@@ -90,6 +90,13 @@ export function extractTaxIdFromText(text: string): string | undefined {
   return found ? found[1]!.replace(/\D/g, "") : undefined;
 }
 
+// Teto de seguranca para a busca por forca bruta abaixo: acima disto, 2^n
+// deixa de ser inofensivo (e, a partir de 31, `1 << n` estoura o inteiro de
+// 32 bits que o JS usa em operadores bit a bit). Um cliente com este volume
+// de notas em aberto ao mesmo tempo cai no fallback (fica sem sugestao de
+// agrupamento) em vez de travar a chamada.
+const MAX_SUBSET_SEARCH_INVOICES = 24;
+
 function subsetsSummingTo(
   invoices: readonly OpenInvoice[],
   target: Cents,
@@ -98,6 +105,7 @@ function subsetsSummingTo(
   // mesmo tempo e pequeno na pratica (poucas dezenas, no maximo), entao 2^n
   // e inofensivo aqui — não é uma busca sobre TODAS as notas da empresa.
   const n = invoices.length;
+  if (n > MAX_SUBSET_SEARCH_INVOICES) return undefined;
   for (let mask = 1; mask < 1 << n; mask++) {
     let sum = 0;
     const subset: OpenInvoice[] = [];

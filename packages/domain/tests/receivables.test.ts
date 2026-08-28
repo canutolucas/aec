@@ -153,6 +153,36 @@ describe("matchReceivables — PIX agrupado", () => {
     const matchedInvoiceIds = result.matched.flatMap((m) => m.invoiceIds).sort();
     expect(matchedInvoiceIds).toEqual(["i1", "i2"]);
   });
+
+  it("cliente com muitas notas em aberto ao mesmo tempo fica sem sugestao de agrupamento, sem travar", () => {
+    // Regressao: a busca por subconjuntos que somam o valor do credito e
+    // 2^n por forca bruta (comentario original: "o numero de notas em aberto
+    // do mesmo cliente ao mesmo tempo e pequeno na pratica"). Um cliente
+    // real pode acumular dezenas de notas — acima do teto de seguranca, a
+    // funcao tem que desistir da sugestao de agrupamento (cair para
+    // unmatchedTransactions) em vez de rodar a busca inteira.
+    const manyInvoices = Array.from({ length: 25 }, (_, i) =>
+      invoice({
+        id: `many-${i}`,
+        number: `NF-${i}`,
+        clientTaxId: CNPJ_XYZ,
+        amount: fromDb("100.00"),
+        outstanding: fromDb("100.00"),
+      }),
+    );
+
+    // 200,00 fecha a soma exata de quaisquer duas notas de 100,00 — se a
+    // busca rodasse sem o teto, ela encontraria esse par e sugeriria o
+    // agrupamento.
+    const result = matchReceivables(
+      [credit({ id: "t1", counterpartyTaxId: CNPJ_XYZ, amount: fromDb("200.00") })],
+      manyInvoices,
+    );
+
+    expect(result.matched).toEqual([]);
+    expect(result.suggested).toEqual([]);
+    expect(result.unmatchedTransactions.map((t) => t.id)).toEqual(["t1"]);
+  });
 });
 
 describe("matchReceivables — parcial", () => {

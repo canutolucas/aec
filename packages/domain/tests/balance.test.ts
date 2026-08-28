@@ -195,6 +195,26 @@ describe("day-by-day ledger", () => {
       "10500.00",
     ]);
   });
+
+  it("keeps the opening balance when the window starts on the opening date itself", () => {
+    // Regressao: a semente da soma corrida usava balanceOn(..., previousDay(start)),
+    // e balanceOn() retorna 0 para qualquer data anterior a openingBalanceDate —
+    // quando start == openingBalanceDate, previousDay(start) cai antes da
+    // abertura, e o saldo inicial sumia de toda a janela (virava 0 em vez de
+    // 10.000, mesmo sem nenhum movimento).
+    const days = dailyBalances(account, [], "2025-01-01", "2025-01-03");
+    expect(days.map((d) => toDb(d.balance))).toEqual(["10000.00", "10000.00", "10000.00"]);
+  });
+
+  it("keeps the opening balance when the window starts before the opening date", () => {
+    // A janela pedida comeca ANTES da abertura da conta; a funcao ja clampa
+    // `start` para openingBalanceDate ("2025-01-01"), entao os dias
+    // retornados sao 01 e 02 — o ponto do teste e so confirmar que esse
+    // clamp nao reintroduz o mesmo bug (saldo zerado no primeiro dia).
+    const days = dailyBalances(account, [], "2024-12-30", "2025-01-02");
+    expect(days.map((d) => d.date)).toEqual(["2025-01-01", "2025-01-02"]);
+    expect(days.map((d) => toDb(d.balance))).toEqual(["10000.00", "10000.00"]);
+  });
 });
 
 describe("consolidated balance", () => {

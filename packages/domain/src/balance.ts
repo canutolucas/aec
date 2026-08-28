@@ -166,7 +166,14 @@ export function dailyBalances(
   const start =
     compareDates(from, opening.openingBalanceDate) < 0 ? opening.openingBalanceDate : from;
 
-  let running = balanceOn(opening, entries, previousDay(start), scope);
+  // When the window starts on (or before) the opening balance date itself,
+  // there is no "eve" to look up: balanceOn() legitimately returns 0 for any
+  // date before openingBalanceDate, which would silently drop the opening
+  // balance from every row instead of just the first day's own movement.
+  let running =
+    compareDates(start, opening.openingBalanceDate) > 0
+      ? balanceOn(opening, entries, previousDay(start), scope)
+      : opening.openingBalance;
 
   return eachDay(start, to).map((date) => {
     const dayEntries = byDate.get(date) ?? [];
