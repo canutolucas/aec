@@ -80,7 +80,7 @@ export default async function PainelPage({
     // aqui, pra nao existir um numero ambiguo de "quanto falta".
     supabase
       .from("statement_lines")
-      .select("id", { count: "exact", head: true })
+      .select("id, bank_account_id")
       .eq("company_id", companyId)
       .eq("status", "pendente"),
     listAccountProfiles(supabase, companyId),
@@ -113,7 +113,13 @@ export default async function PainelPage({
     ? null
     : (fechamentoResult.data as MonthlyClosing | null);
   const mesFechado = Boolean(fechamento?.locked_at);
-  const linhasPendentes = linhasResult.error ? 0 : (linhasResult.count ?? 0);
+  // Mesmo escopo de perfil que as demais consultas -- senao esta contagem
+  // (que aparece lado a lado com "aConciliar", ja filtrada) ficaria sempre
+  // no total da empresa inteira quando uma lente esta selecionada, voltando
+  // a divergir do que a pessoa ve ao clicar em Conciliacao.
+  const linhasPendentes = linhasResult.error
+    ? 0
+    : (linhasResult.data ?? []).filter((linha) => noEscopo(linha.bank_account_id)).length;
 
   const saldoAtual = sum(contas.map((conta) => fromDb(conta.current_balance)));
   const aConciliar = contas.reduce((total, conta) => total + Number(conta.unreconciled_count), 0);

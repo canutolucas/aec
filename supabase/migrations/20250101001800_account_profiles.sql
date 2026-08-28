@@ -109,6 +109,7 @@ create or replace function public.create_account_profile(
 )
 returns public.account_profiles
 language plpgsql
+security invoker
 set search_path = public, pg_temp
 as $$
 declare
@@ -153,6 +154,7 @@ create or replace function public.set_account_profile_accounts(
 )
 returns void
 language plpgsql
+security invoker
 set search_path = public, pg_temp
 as $$
 begin

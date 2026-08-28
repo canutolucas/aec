@@ -1,4 +1,4 @@
-import type { BankAccount, MonthlyClosing } from "@aec/db";
+import { type BankAccount, hasRole, type MonthlyClosing } from "@aec/db";
 import {
   addDays,
   fromDb,
@@ -186,8 +186,11 @@ export default async function HojePage({ params }: { params: Promise<{ companyId
       tudoEmDia || index < indiceAtual ? "done" : index === indiceAtual ? "current" : "upcoming",
   }));
 
-  const podeSubirExtrato = accounts.length > 0;
-  const canWrite = podeSubirExtrato; // mantido explicito pra ficar claro que isto e sobre dados, nao papel — RLS decide o resto
+  // Mesma checagem que /revisar, /lancamentos etc ja fazem — so conveniencia
+  // de UI (RLS decide o resto de verdade), mas sem ela um cliente_leitura
+  // via a mesma "Proxima acao" acionavel (Subir extrato, Fechar o mes) que
+  // quem pode escrever, em vez do aviso de "so consulta".
+  const canWrite = hasRole(session.role, "assistente");
 
   return (
     <div className="space-y-6">

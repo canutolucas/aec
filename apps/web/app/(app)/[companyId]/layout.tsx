@@ -62,7 +62,11 @@ export default async function CompanyLayout({
   const { companyId } = await params;
   const session = await requireCompany(companyId);
   const supabaseSSR = await createServerSupabase();
-  const perfis = await listAccountProfiles(supabaseSSR, companyId);
+  // Melhor esforco: o layout nao tem error.tsx proprio (so cada rota abaixo
+  // dele tem) -- uma falha aqui (rede, RLS, ou a migration de perfis ainda
+  // nao aplicada em producao) derrubaria TODA pagina da empresa, nao so o
+  // seletor de perfis. Sem perfil nenhum, o seletor global so fica oculto.
+  const perfis = await listAccountProfiles(supabaseSSR, companyId).catch(() => []);
 
   async function sair() {
     "use server";
