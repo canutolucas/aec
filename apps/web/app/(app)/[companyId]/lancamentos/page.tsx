@@ -2,6 +2,7 @@ import {
   type BankAccount,
   type Category,
   hasRole,
+  listAccountProfiles,
   type MonthlyClosing,
   type Transaction,
 } from "@aec/db";
@@ -10,6 +11,7 @@ import { fromDb, sum } from "@aec/domain";
 
 import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
+import { PERFIL_PARAM, resolvePerfilSelecao } from "@/lib/ui/account-profiles";
 import { Alert, Card, CardHeader, EmptyState, Money } from "@/lib/ui/components";
 import { formatMonth } from "@/lib/ui/format";
 
@@ -25,7 +27,7 @@ export default async function LancamentosPage({
   searchParams,
 }: {
   params: Promise<{ companyId: string }>;
-  searchParams: Promise<{ mes?: string; conta?: string }>;
+  searchParams: Promise<{ mes?: string; conta?: string; [PERFIL_PARAM]?: string }>;
 }) {
   const { companyId } = await params;
   const filtros = await searchParams;
@@ -39,34 +41,36 @@ export default async function LancamentosPage({
 
   const supabase = await createServerSupabase();
 
-  const [contasResult, categoriasResult, lancamentosResult, fechamentoResult] = await Promise.all([
-    supabase
-      .from("bank_accounts")
-      .select("*")
-      .eq("company_id", companyId)
-      .eq("is_active", true)
-      .order("name"),
-    supabase
-      .from("categories")
-      .select("*")
-      .eq("company_id", companyId)
-      .eq("is_active", true)
-      .order("name"),
-    supabase
-      .from("transactions")
-      .select("*")
-      .eq("company_id", companyId)
-      .gte("booking_date", primeiroDia)
-      .lte("booking_date", ultimoDia)
-      .order("booking_date", { ascending: false })
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("monthly_closings")
-      .select("*")
-      .eq("company_id", companyId)
-      .eq("period", primeiroDia)
-      .maybeSingle(),
-  ]);
+  const [contasResult, categoriasResult, lancamentosResult, fechamentoResult, perfis] =
+    await Promise.all([
+      supabase
+        .from("bank_accounts")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .order("name"),
+      supabase
+        .from("categories")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .order("name"),
+      supabase
+        .from("transactions")
+        .select("*")
+        .eq("company_id", companyId)
+        .gte("booking_date", primeiroDia)
+        .lte("booking_date", ultimoDia)
+        .order("booking_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("monthly_closings")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("period", primeiroDia)
+        .maybeSingle(),
+      listAccountProfiles(supabase, companyId),
+    ]);
 
   for (const result of [contasResult, categoriasResult, lancamentosResult]) {
     if (result.error) throw result.error;
@@ -78,9 +82,15 @@ export default async function LancamentosPage({
   const mesFechado = Boolean(fechamento?.locked_at);
 
   const todos = (lancamentosResult.data ?? []) as Transaction[];
+  // O perfil selecionado no cabecalho (ver PerfilSelector) so entra quando a
+  // pessoa nao escolheu uma conta especifica aqui embaixo — a conta unica ja
+  // e um filtro mais especifico que a lente.
+  const { bankAccountIds: contasDoPerfil } = resolvePerfilSelecao(filtros[PERFIL_PARAM], perfis);
   const lancamentos = filtros.conta
     ? todos.filter((lancamento) => lancamento.bank_account_id === filtros.conta)
-    : todos;
+    : contasDoPerfil
+      ? todos.filter((lancamento) => contasDoPerfil.includes(lancamento.bank_account_id))
+      : todos;
 
   // Historico original do banco (statement_lines.memo), ligado por
   // matched_transaction_id — pedido direto da usuaria final: "nao consigo

@@ -12,6 +12,7 @@ export * from "./components/form-fields";
 export * from "./components/logo";
 export * from "./components/money";
 export * from "./components/page-header";
+export * from "./components/popover";
 export * from "./components/skeleton";
 export * from "./components/spinner";
 export * from "./components/stat-tile";

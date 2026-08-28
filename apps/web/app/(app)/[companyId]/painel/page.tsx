@@ -1,4 +1,9 @@
-import type { AccountBalance, MonthlyClosing, Transaction } from "@aec/db";
+import {
+  type AccountBalance,
+  listAccountProfiles,
+  type MonthlyClosing,
+  type Transaction,
+} from "@aec/db";
 import { addDays, startOfMonth, todayInBrazil } from "@aec/domain";
 import { fromDb, sum } from "@aec/domain";
 import { project } from "@aec/domain";
@@ -6,6 +11,7 @@ import Link from "next/link";
 
 import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
+import { PERFIL_PARAM, resolvePerfilSelecao } from "@/lib/ui/account-profiles";
 import { Alert, Card, CardHeader, EmptyState, LinkButton, Money } from "@/lib/ui/components";
 import { formatDate, formatMonth } from "@/lib/ui/format";
 import { routes } from "@/lib/ui/routes";
@@ -14,8 +20,15 @@ export const metadata = { title: "Painel — Controle Bancario" };
 
 const HORIZONTE_DIAS = 30;
 
-export default async function PainelPage({ params }: { params: Promise<{ companyId: string }> }) {
+export default async function PainelPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ companyId: string }>;
+  searchParams: Promise<{ [PERFIL_PARAM]?: string }>;
+}) {
   const { companyId } = await params;
+  const filtros = await searchParams;
   await requireAdvancedAccess(companyId);
 
   const hoje = todayInBrazil();
@@ -24,54 +37,75 @@ export default async function PainelPage({ params }: { params: Promise<{ company
 
   const supabase = await createServerSupabase();
 
-  const [saldosResult, previstosResult, doMesResult, notasResult, fechamentoResult, linhasResult] =
-    await Promise.all([
-      supabase.from("v_account_balances").select("*").eq("company_id", companyId).order("name"),
-      // Inclui previstos vencidos (anteriores a hoje): eles continuam para pagar e
-      // a projecao os traz para o primeiro dia em vez de ignora-los.
-      supabase
-        .from("transactions")
-        .select("*")
-        .eq("company_id", companyId)
-        .eq("status", "previsto")
-        .lte("booking_date", fimDoHorizonte)
-        .order("booking_date"),
-      supabase
-        .from("transactions")
-        .select("*")
-        .eq("company_id", companyId)
-        .eq("status", "realizado")
-        .gte("booking_date", inicioDoMes)
-        .lte("booking_date", hoje),
-      supabase
-        .from("v_invoice_balances")
-        .select("outstanding_amount")
-        .eq("company_id", companyId)
-        .gt("outstanding_amount", 0),
-      supabase
-        .from("monthly_closings")
-        .select("*")
-        .eq("company_id", companyId)
-        .eq("period", inicioDoMes)
-        .maybeSingle(),
-      // Linhas do extrato ainda sem tratamento (nao viraram lancamento nem
-      // foram casadas) — uma populacao diferente do "lancamento sem
-      // conciliar" abaixo. As duas contagens de /conciliacao, lado a lado
-      // aqui, pra nao existir um numero ambiguo de "quanto falta".
-      supabase
-        .from("statement_lines")
-        .select("id", { count: "exact", head: true })
-        .eq("company_id", companyId)
-        .eq("status", "pendente"),
-    ]);
+  const [
+    saldosResult,
+    previstosResult,
+    doMesResult,
+    notasResult,
+    fechamentoResult,
+    linhasResult,
+    perfis,
+  ] = await Promise.all([
+    supabase.from("v_account_balances").select("*").eq("company_id", companyId).order("name"),
+    // Inclui previstos vencidos (anteriores a hoje): eles continuam para pagar e
+    // a projecao os traz para o primeiro dia em vez de ignora-los.
+    supabase
+      .from("transactions")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("status", "previsto")
+      .lte("booking_date", fimDoHorizonte)
+      .order("booking_date"),
+    supabase
+      .from("transactions")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("status", "realizado")
+      .gte("booking_date", inicioDoMes)
+      .lte("booking_date", hoje),
+    supabase
+      .from("v_invoice_balances")
+      .select("outstanding_amount")
+      .eq("company_id", companyId)
+      .gt("outstanding_amount", 0),
+    supabase
+      .from("monthly_closings")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("period", inicioDoMes)
+      .maybeSingle(),
+    // Linhas do extrato ainda sem tratamento (nao viraram lancamento nem
+    // foram casadas) — uma populacao diferente do "lancamento sem
+    // conciliar" abaixo. As duas contagens de /conciliacao, lado a lado
+    // aqui, pra nao existir um numero ambiguo de "quanto falta".
+    supabase
+      .from("statement_lines")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId)
+      .eq("status", "pendente"),
+    listAccountProfiles(supabase, companyId),
+  ]);
 
   for (const result of [saldosResult, previstosResult, doMesResult, notasResult]) {
     if (result.error) throw result.error;
   }
 
-  const contas = (saldosResult.data ?? []) as AccountBalance[];
-  const previstos = (previstosResult.data ?? []) as Transaction[];
-  const doMes = (doMesResult.data ?? []) as Transaction[];
+  // O perfil selecionado no cabecalho estreita o painel para so as contas
+  // daquela lente — saldo, projecao e vencimentos, tudo recalculado em cima
+  // do subconjunto, nao uma segunda versao da conta.
+  const { bankAccountIds: contasDoPerfil } = resolvePerfilSelecao(filtros[PERFIL_PARAM], perfis);
+  const noEscopo = (bankAccountId: string) =>
+    contasDoPerfil === null || contasDoPerfil.includes(bankAccountId);
+
+  const contas = ((saldosResult.data ?? []) as AccountBalance[]).filter((conta) =>
+    noEscopo(conta.bank_account_id),
+  );
+  const previstos = ((previstosResult.data ?? []) as Transaction[]).filter((t) =>
+    noEscopo(t.bank_account_id),
+  );
+  const doMes = ((doMesResult.data ?? []) as Transaction[]).filter((t) =>
+    noEscopo(t.bank_account_id),
+  );
   const aReceber = sum((notasResult.data ?? []).map((row) => fromDb(row.outstanding_amount)));
   // Melhor esforco: mes fechado e linhas pendentes sao avisos informativos,
   // nao travam o resto do painel se a consulta falhar.

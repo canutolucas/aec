@@ -1,4 +1,4 @@
-import { type BankAccount, type Transaction } from "@aec/db";
+import { type BankAccount, listAccountProfiles, type Transaction } from "@aec/db";
 import {
   addDays,
   type Cents,
@@ -13,6 +13,7 @@ import {
 
 import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
+import { PERFIL_PARAM, resolvePerfilSelecao } from "@/lib/ui/account-profiles";
 
 import { FiltroPeriodo } from "./filtro-periodo";
 import { FluxoDeCaixaClient } from "./fluxo-de-caixa-client";
@@ -24,7 +25,7 @@ export default async function RelatoriosPage({
   searchParams,
 }: {
   params: Promise<{ companyId: string }>;
-  searchParams: Promise<{ de?: string; ate?: string; conta?: string }>;
+  searchParams: Promise<{ de?: string; ate?: string; conta?: string; [PERFIL_PARAM]?: string }>;
 }) {
   const { companyId } = await params;
   const filtros = await searchParams;
@@ -49,7 +50,17 @@ export default async function RelatoriosPage({
   if (contasError) throw contasError;
   const contas = (contasData ?? []) as BankAccount[];
 
-  const contasEmEscopo = filtros.conta ? contas.filter((c) => c.id === filtros.conta) : contas;
+  const perfis = await listAccountProfiles(supabase, companyId);
+  const { bankAccountIds: contasDoPerfil } = resolvePerfilSelecao(filtros[PERFIL_PARAM], perfis);
+
+  // O perfil selecionado no cabecalho so entra quando a pessoa nao escolheu
+  // uma conta especifica no filtro desta tela — a conta unica ja e mais
+  // especifica que a lente.
+  const contasEmEscopo = filtros.conta
+    ? contas.filter((c) => c.id === filtros.conta)
+    : contasDoPerfil
+      ? contas.filter((c) => contasDoPerfil.includes(c.id))
+      : contas;
 
   // Saldo inicial: soma o quanto cada conta ja tinha ANTES do periodo. Traz
   // so a coluna amount (nao a linha inteira: sem descricao, categoria,

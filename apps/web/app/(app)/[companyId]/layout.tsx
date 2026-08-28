@@ -1,13 +1,15 @@
-import { hasRole, ROLE_LABELS } from "@aec/db";
+import { hasRole, listAccountProfiles, ROLE_LABELS } from "@aec/db";
 import { cn, Logo, ThemeToggle } from "@aec/ui";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { requireCompany } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 import { routes } from "@/lib/ui/routes";
 
 import { MobileTabBar } from "./mobile-tab-bar";
+import { PerfilSelector } from "./perfil-selector";
 
 const NAV = [
   { key: "hoje", label: "Hoje", href: routes.today },
@@ -59,6 +61,8 @@ export default async function CompanyLayout({
 }) {
   const { companyId } = await params;
   const session = await requireCompany(companyId);
+  const supabaseSSR = await createServerSupabase();
+  const perfis = await listAccountProfiles(supabaseSSR, companyId);
 
   async function sair() {
     "use server";
@@ -80,6 +84,9 @@ export default async function CompanyLayout({
           </div>
 
           <div className="flex items-center gap-3">
+            <Suspense fallback={null}>
+              <PerfilSelector perfis={perfis} />
+            </Suspense>
             <ThemeToggle />
             {session.companies.length > 1 && (
               <Link

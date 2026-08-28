@@ -2,6 +2,7 @@ import {
   type BankAccount,
   type Category,
   hasRole,
+  listAccountProfiles,
   type MatchingRule,
   type StatementLine,
   type Transaction,
@@ -10,6 +11,7 @@ import { type BalanceCheck as BalanceCheckResult, checkBalance, fromDb } from "@
 
 import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
+import { PERFIL_PARAM, resolvePerfilSelecao } from "@/lib/ui/account-profiles";
 import { Alert } from "@/lib/ui/components";
 
 import { ReconciliationClient } from "./conciliacao-client";
@@ -23,10 +25,13 @@ export interface BalanceCheck extends BalanceCheckResult {
 
 export default async function ReconciliationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ companyId: string }>;
+  searchParams: Promise<{ [PERFIL_PARAM]?: string }>;
 }) {
   const { companyId } = await params;
+  const filtros = await searchParams;
   const session = await requireAdvancedAccess(companyId);
   const supabase = await createServerSupabase();
 
@@ -39,6 +44,7 @@ export default async function ReconciliationPage({
     rulesResult,
     importsResult,
     realizedResult,
+    perfis,
   ] = await Promise.all([
     supabase
       .from("bank_accounts")
@@ -101,6 +107,7 @@ export default async function ReconciliationPage({
       .select("bank_account_id, booking_date, amount, status")
       .eq("company_id", companyId)
       .eq("status", "realizado"),
+    listAccountProfiles(supabase, companyId),
   ]);
 
   for (const result of [
@@ -117,7 +124,17 @@ export default async function ReconciliationPage({
   }
 
   const canEdit = hasRole(session.role, "assistente");
-  const accounts = (accountsResult.data ?? []) as BankAccount[];
+
+  // O perfil selecionado no cabecalho filtra tudo nesta tela — nao ha um
+  // filtro de conta unica proprio aqui como em /lancamentos e /relatorios,
+  // entao a lente e a unica forma de estreitar o que aparece.
+  const { bankAccountIds: contasDoPerfil } = resolvePerfilSelecao(filtros[PERFIL_PARAM], perfis);
+  const noEscopo = (bankAccountId: string) =>
+    contasDoPerfil === null || contasDoPerfil.includes(bankAccountId);
+
+  const accounts = ((accountsResult.data ?? []) as BankAccount[]).filter((account) =>
+    noEscopo(account.id),
+  );
 
   const latestImportByAccount = new Map<string, { balance: string; date: string }>();
   for (const row of importsResult.data ?? []) {
@@ -182,9 +199,15 @@ export default async function ReconciliationPage({
       <ReconciliationClient
         companyId={companyId}
         accounts={accounts}
-        pendingLines={(linesResult.data ?? []) as StatementLine[]}
-        reconciledLines={(reconciledLinesResult.data ?? []) as StatementLine[]}
-        transactions={(transactionsResult.data ?? []) as Transaction[]}
+        pendingLines={((linesResult.data ?? []) as StatementLine[]).filter((line) =>
+          noEscopo(line.bank_account_id),
+        )}
+        reconciledLines={((reconciledLinesResult.data ?? []) as StatementLine[]).filter((line) =>
+          noEscopo(line.bank_account_id),
+        )}
+        transactions={((transactionsResult.data ?? []) as Transaction[]).filter((transaction) =>
+          noEscopo(transaction.bank_account_id),
+        )}
         categories={(categoriesResult.data ?? []) as Category[]}
         matchingRules={(rulesResult.data ?? []) as MatchingRule[]}
         balanceChecks={balanceChecks}
