@@ -12,11 +12,22 @@ import {
   suggestRuleText,
 } from "@aec/domain";
 import { type CanonicalStatement, toMatchableLines } from "@aec/statements";
-import { Alert, Badge, Button, Card, CardHeader, EmptyState, Field, Select } from "@aec/ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Field,
+  LinkButton,
+  Select,
+} from "@aec/ui";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { formatDate } from "@/lib/ui/format";
+import { routes } from "@/lib/ui/routes";
 
 import {
   autoApplyReconciliation,
@@ -358,7 +369,12 @@ export function ReconciliationClient({
     return (
       <EmptyState
         title="Cadastre uma conta antes de importar"
-        description="A conciliacao sempre acontece dentro de uma conta bancaria, para nao misturar movimentacoes de bancos diferentes."
+        description="A conciliação sempre acontece dentro de uma conta bancária, para não misturar movimentações de bancos diferentes."
+        action={
+          <LinkButton href={routes.accounts(companyId)} variant="primary">
+            Cadastrar contas
+          </LinkButton>
+        }
       />
     );
   }

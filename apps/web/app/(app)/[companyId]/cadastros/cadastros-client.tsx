@@ -188,6 +188,7 @@ export function CadastrosClient({
       <Card>
         <CardHeader title={`Regras de categorização aprendidas (${matchingRules.length})`} />
         <RegrasList
+          companyId={companyId}
           matchingRules={matchingRules}
           categoryNameById={categoryNameById}
           canEdit={canEditOperational}

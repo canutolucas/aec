@@ -1244,6 +1244,18 @@ begin
     (select tax_id from public.companies where id = v_id) = '11222333000443',
     'CNPJ e normalizado para so digitos'
   );
+  perform pg_temp.assert(
+    (select count(*) from public.categories where company_id = v_id) = 9,
+    'empresa nova nasce com um plano de contas minimo (Fase 4), nao vazia'
+  );
+  perform pg_temp.assert(
+    (select count(*) from public.categories where company_id = v_id and kind = 'entrada') = 2,
+    'o plano de contas semeado tem categorias de entrada'
+  );
+  perform pg_temp.assert(
+    (select count(*) from public.categories where company_id = v_id and kind = 'saida') = 7,
+    'o plano de contas semeado tem categorias de saida'
+  );
 end $$;
 reset role;
 

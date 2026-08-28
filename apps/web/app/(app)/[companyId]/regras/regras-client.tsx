@@ -67,6 +67,7 @@ export function RegrasClient({
       <Card>
         <CardHeader title={`Regras ativas (${matchingRules.length})`} />
         <RegrasList
+          companyId={companyId}
           matchingRules={matchingRules}
           categoryNameById={categoryNameById}
           canEdit={canEdit}

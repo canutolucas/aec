@@ -6,15 +6,19 @@
  */
 
 import type { MatchingRule } from "@aec/db";
-import { Button, EmptyState } from "@aec/ui";
+import { Button, EmptyState, LinkButton } from "@aec/ui";
+
+import { routes } from "@/lib/ui/routes";
 
 export function RegrasList({
+  companyId,
   matchingRules,
   categoryNameById,
   canEdit,
   disabled,
   onDeactivate,
 }: {
+  companyId: string;
   matchingRules: readonly MatchingRule[];
   categoryNameById: ReadonlyMap<string, string>;
   canEdit: boolean;
@@ -25,7 +29,12 @@ export function RegrasList({
     return (
       <EmptyState
         title="Nenhuma regra ainda"
-        description='Regras nascem na tela de Conciliacao: ao criar um lancamento a partir de uma linha do extrato, marque "Salvar como regra".'
+        description='Regras nascem na tela de Conciliação: ao criar um lançamento a partir de uma linha do extrato, marque "Salvar como regra".'
+        action={
+          <LinkButton href={routes.reconciliation(companyId)} variant="primary">
+            Ir para Conciliação
+          </LinkButton>
+        }
       />
     );
   }
