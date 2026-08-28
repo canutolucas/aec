@@ -285,6 +285,96 @@ testes de negação pra cada uma (assistente barrado em `close_month`,
 cliente_leitura barrado em `reopen_month`; o teste de `settle_invoices` já
 existia, só o comentário foi atualizado).
 
+### Reforma de UI/UX — "A Esteira" (major update, Fase 1 completa)
+
+Motivada por uma queixa direta do dono do projeto: a usabilidade estava
+inaceitável e a usuária final — contadora com 30 anos de mercado, sua sogra —
+não estava conseguindo se adaptar, mesmo com "boa estrutura" por baixo. Nas
+palavras dele, faltava "entrar num fordismo, numa cadeia de produção" ao
+abrir o app.
+
+Diagnóstico (duas varreduras completas desta leva: jornada das 11 telas +
+inventário do design system): o app era organizado por tabela do banco, não
+por tarefa do contador. Defeitos concretos: `/painel` era a aterrissagem
+padrão sem UM botão sequer; `/inicio` renderizava um paredão de 30 decisões
+de uma vez em vez de uma fila; o motivo do pareamento
+(`packages/domain/src/matching.ts`, `describe()`) saía em inglês; datas cruas
+em ISO em `/conciliacao`; `/recebimentos` escrevia no banco
+(`autoApplyReceivables`) sozinho ao montar a tela, sem pedir; regra de
+categorização nascia em silêncio; zero infraestrutura de feedback
+(`loading.tsx`/`error.tsx`, toast, skeleton — nenhum existia).
+
+Decisões tomadas com o usuário: redesenhar também o visual (não só
+comportamento); unificar `simpleMode` numa interface só (Fase 2, ainda não
+feita); entregar em fases, começando pelo fluxo do dia a dia. Dois pedidos
+diretos da usuária entraram no escopo: "subperfis"/lentes de análise por
+ramo do negócio (Fase 2a, ainda não feita — depende de confirmar se todas as
+contas estão numa única empresa) e "não consigo lembrar do que se refere
+aquele valor" (Fase 1d, feita nesta leva).
+
+**Fase 1 (o fluxo do dia a dia) está completa — 1a a 1e:**
+
+- **1a — fundação do design system**: `@radix-ui/react-*` (Dialog, Tabs,
+  Tooltip, Checkbox, Switch, Popover) entram em `packages/ui`, cumprindo o
+  que o design system sempre alegou usar ("shadcn + TweakCN") e nunca tinha
+  instalado. Componentes novos: `Dialog`/`ConfirmDialog` (substitui o
+  `confirm()` cru do navegador), `Toast`/`ToastProvider`, `Stepper`,
+  `Skeleton`, `Spinner` (+ `Button` com prop `loading`), `PageHeader`,
+  `StatTile`, `DataTable`, `Tooltip`, `Tabs`, `Checkbox`, `Switch`,
+  `ThemeToggle`. Refresh de `theme.css`: superfícies mais claras e neutras,
+  `--radius` maior, tokens de sombra novos — e o **dark mode**, que já
+  estava 100% definido em CSS desde a primeira leva e nunca tinha sido
+  ligado, agora liga via `next-themes` (`app/providers.tsx`) com um toggle no
+  cabeçalho. `loading.tsx`/`error.tsx` chegaram a toda rota — antes, toda
+  navegação era uma tela em branco enquanto 6-8 queries resolviam no
+  servidor.
+- **1b — tela "Hoje" (`/[companyId]/hoje`)**: nova aterrissagem única,
+  substituindo `/painel` e `/inicio` — `app/page.tsx` e
+  `requireCompany()` redirecionam pra lá agora, independente de
+  `simpleMode`. Mostra a esteira do mês num `Stepper` (Extrato → Revisar →
+  Notas → Conferir → Fechar, cada estágio com estado), uma única próxima
+  ação em destaque (upload de extrato, ir revisar, ou "tudo em dia, pode
+  fechar"), e os mesmos avisos que `/painel` já tinha (caixa negativo, notas
+  vencidas, mês fechado) — mesma consulta, mesma resposta, não duas versões
+  divergentes.
+- **1c — fila de revisão (`/[companyId]/revisar`)**: o fordismo literal.
+  Troca o paredão de N decisões simultâneas por **um item por vez, em tela
+  cheia**, com contador de progresso (`3 de 17`), o lançamento candidato
+  lado a lado com o motivo do pareamento em português, atalhos de teclado no
+  desktop (`Enter` confirma, `→` pula), e aviso explícito antes de criar
+  regra automática (checkbox ligada por padrão mas visível e desligável —
+  antes isso acontecia em silêncio). Nenhuma lógica de negócio nova: é uma
+  casca de apresentação sobre `matchStatement`/`categorize`
+  (`packages/domain`) e as Server Actions que `/conciliacao` já usava.
+- **1d — painel de detalhe do lançamento (esta leva)**: pedido direto da
+  usuária. `statement_lines.memo` — o histórico original que o banco manda
+  ("pix pra fulano"), ligado por `matched_transaction_id` — aparece agora em
+  `Tooltip` ao passar o mouse no valor de `/lancamentos`, e num `Dialog`
+  completo ao clicar (documento, categoria, conta, situação, forma de
+  pagamento). `transactions.notes` — campo livre que existia desde a
+  primeira leva e nenhuma tela jamais expunha — vira editável nesse mesmo
+  painel, via a nova Server Action `atualizarObservacoes`
+  (`apps/web/lib/db/transactions.ts`). `apps/web/app/(app)/[companyId]/lancamentos/page.tsx`
+  busca o memo de todos os lançamentos do mês numa única query em lote
+  (`statement_lines.matched_transaction_id IN (...)`), não uma por linha da
+  tabela.
+- **1e — correções de conteúdo que a fila expôs**: `describe()`
+  (`packages/domain/src/matching.ts`) traduzido para português — o motivo do
+  pareamento saía literalmente em inglês ("same amount, 3 days apart...");
+  `formatDate` aplicado a todas as datas de `/conciliacao` (estavam em ISO
+  cru); `/recebimentos` parou de rodar `autoApplyReceivables` sozinho ao
+  montar a tela — agora precisa de um clique explícito ("Buscar e organizar
+  recebimentos") antes de dar baixa em qualquer nota.
+
+**Pendente do plano geral** (próximas levas — ver "Pendências reais"):
+Fase 2 (perfis/lentes de contas + unificar `simpleMode` numa interface só e
+navegação), Fase 3 (vocabulário/microcopy — "pareamento" → "correspondência",
+etc.), Fase 4 (assistente de primeiro uso + seed de categorias em
+`create_company`), Fase 5 (relatório por categoria, centro de custo/
+contraparte, transferência entre contas, cancelar nota importada por engano,
+paginação). O plano completo com todo o levantamento vive só na conversa —
+não há arquivo de plano versionado no repo.
+
 ## Fases do projeto — o que falta
 
 Todas as fases planejadas foram concluídas ou encerradas por decisão.
@@ -307,6 +397,15 @@ validação do parser contra XML real.
 
 ## Pendências reais
 
+- **Reforma de UI/UX — Fases 2 a 5**: a Fase 1 (fluxo do dia a dia — telas
+  Hoje/Revisar, painel de detalhe do lançamento, design system novo, dark
+  mode) está completa, ver seção acima. Falta: Fase 2 (perfis/lentes de
+  contas — checar antes se todas as contas estão numa única empresa, senão a
+  fase precisa ser replanejada; e unificar `simpleMode` numa interface só),
+  Fase 3 (vocabulário/microcopy), Fase 4 (assistente de primeiro uso + seed
+  de categorias em `create_company`), Fase 5 (relatório por categoria,
+  centro de custo/contraparte, transferência entre contas, cancelar nota
+  importada por engano, paginação).
 - **Web mobile**: alvo de toque e menu dedicado (barra de abas) já feitos —
   ver seção acima. Falta só testar de verdade num aparelho; este sandbox não
   tem `docker` (`docker ps` falha), então não dá pra subir Supabase local e
