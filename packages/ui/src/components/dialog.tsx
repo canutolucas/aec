@@ -9,9 +9,10 @@
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
+import { type ComponentProps, type ReactNode, useState } from "react";
 
 import { cn } from "../lib/cn";
+import { Button } from "./button";
 
 export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;
@@ -68,6 +69,10 @@ export function DialogFooter({ children }: { children: ReactNode }) {
  * Confirmacao destrutiva pronta — o substituto direto do `confirm()`
  * nativo. `open`/`onOpenChange` controlados por quem chama (nao ha um
  * `confirm()` sincrono equivalente com um modal de verdade).
+ *
+ * `onConfirm` pode devolver uma Promise (o caso comum: uma Server Action) —
+ * o dialogo so fecha depois dela resolver, em vez de fechar na hora e deixar
+ * a acao terminando por baixo sem ninguem ver o resultado.
  */
 export function ConfirmDialog({
   open,
@@ -86,39 +91,41 @@ export function ConfirmDialog({
   description?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
-  onConfirm: () => void;
+  onConfirm: () => unknown | Promise<unknown>;
   tone?: "default" | "danger";
   disabled?: boolean;
 }) {
+  const [pending, setPending] = useState(false);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader title={title} description={description} />
         <DialogFooter>
           <DialogPrimitive.Close asChild>
-            <button
-              type="button"
-              className="border-border hover:bg-muted rounded-md border px-3 py-2 text-sm font-medium"
-            >
+            <Button type="button" variant="secondary" disabled={pending}>
               {cancelLabel}
-            </button>
+            </Button>
           </DialogPrimitive.Close>
-          <button
+          <Button
             type="button"
             disabled={disabled}
-            onClick={() => {
-              onConfirm();
-              onOpenChange(false);
+            loading={pending}
+            onClick={async () => {
+              setPending(true);
+              try {
+                await onConfirm();
+                onOpenChange(false);
+              } finally {
+                setPending(false);
+              }
             }}
             className={cn(
-              "rounded-md px-3 py-2 text-sm font-medium disabled:pointer-events-none disabled:opacity-50",
-              tone === "danger"
-                ? "bg-destructive text-destructive-foreground hover:opacity-90"
-                : "bg-primary text-primary-foreground hover:opacity-90",
+              tone === "danger" && "bg-destructive text-destructive-foreground hover:opacity-90",
             )}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

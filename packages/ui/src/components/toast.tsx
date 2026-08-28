@@ -17,6 +17,7 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -57,13 +58,37 @@ const DURATION_MS = 5000;
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const nextId = useRef(0);
+  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
 
-  const toast = useCallback((text: string, tone: ToastTone = "success") => {
-    const id = nextId.current++;
-    setItems((prev) => [...prev, { id, text, tone }]);
-    setTimeout(() => {
-      setItems((prev) => prev.filter((item) => item.id !== id));
-    }, DURATION_MS);
+  const dismiss = useCallback((id: number) => {
+    const timer = timers.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timers.current.delete(id);
+    }
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const toast = useCallback(
+    (text: string, tone: ToastTone = "success") => {
+      const id = nextId.current++;
+      setItems((prev) => [...prev, { id, text, tone }]);
+      timers.current.set(
+        id,
+        setTimeout(() => dismiss(id), DURATION_MS),
+      );
+    },
+    [dismiss],
+  );
+
+  // Nao deixa um setTimeout tentar setState depois que o provider (que na
+  // pratica vive na raiz do app e nunca desmonta, mas testes isolados podem)
+  // sair da arvore.
+  useEffect(() => {
+    const timersAtMount = timers.current;
+    return () => {
+      timersAtMount.forEach(clearTimeout);
+    };
   }, []);
 
   const value = useMemo(() => ({ toast }), [toast]);
@@ -90,7 +115,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <p className="flex-1">{item.text}</p>
               <button
                 type="button"
-                onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
+                onClick={() => dismiss(item.id)}
                 className="text-muted-foreground hover:text-foreground shrink-0"
               >
                 <X className="size-3.5" aria-hidden />
