@@ -416,6 +416,63 @@ entre contas, cancelar nota importada por engano, paginação). O plano
 completo com todo o levantamento vive só na conversa — não há arquivo de
 plano versionado no repo.
 
+### Revisão noturna de bugs (madrugada de 28/08/2026, sem supervisão)
+
+Lucas pediu uma rotina automática pra revisar e corrigir bugs sozinho até
+as 06h enquanto ele dormia (sem construir feature nova, sem tocar a Fase
+2b). Rodou de hora em hora via `code-review --fix`, cobrindo o diff inteiro
+desta sessão e depois cada pacote isolado; 5 commits (`7c61751`, `befb673`,
+`d9d0844`, `30c6402`, `2c45de3`), pipeline completo verde em todos. Achados
+reais corrigidos:
+
+- **`[companyId]/layout.tsx`**: `listAccountProfiles()` sem guarda
+  derrubava toda página da empresa (o layout não tem `error.tsx` próprio)
+  se a query falhasse — o caso óbvio sendo a migration de perfis, ainda não
+  aplicada em produção. Agora degrada: sem perfis, o seletor só fica
+  oculto.
+- **`painel/page.tsx`**: a contagem de linhas de extrato pendentes não
+  respeitava o filtro de perfil selecionado, enquanto a contagem ao lado
+  (`aConciliar`) respeitava — reintroduzia a divergência que a seção
+  "Consolidação de status disperso" registra como resolvida.
+- **`hoje/page.tsx`**: `canWrite` era sempre `true` (checagem morta —
+  já tinha um early-return antes que garantia isso), então `cliente_leitura`
+  via CTA de escrita ("Fechar o mês") em vez do aviso de só-consulta que
+  `/revisar` e `/lancamentos` já mostram pro mesmo papel.
+- **`packages/domain/balance.ts`**: `dailyBalances()` zerava o saldo
+  inicial quando a janela pedida começa na (ou antes da) data de abertura
+  da conta — `balanceOn(..., previousDay(start))` retorna 0 para qualquer
+  data anterior à abertura. Sem nenhuma tela chamando ainda, mas ia
+  aparecer assim que o gráfico de evolução (que o docstring já promete)
+  fosse ligado.
+- **`packages/domain/receivables.ts`**: a busca de PIX agrupado
+  (`subsetsSummingTo`) era força bruta 2^n sem teto — um cliente com
+  dezenas de notas em aberto travaria a Server Action por segundos, e a
+  partir de 31 notas o deslocamento de bits de 32 bits do JS estoura.
+  Teto de 24, mesmo padrão de guarda que `BankingCalendar`/
+  `expandRecurrence` já usam.
+- **`packages/statements/nfse.ts`**: `parseNfseAmount` era uma cópia de
+  `parseOfxAmount` que perdeu o strip do `+` explícito — um valor tipo
+  "+150,00" num campo de retenção derrubava a nota inteira. Extraído pra
+  um `parseTolerantAmount` compartilhado (`universal/amount.ts`), usado
+  pelos dois parsers agora.
+- **`generate-types.mjs`**: um tipo array de enum virava
+  `"a" | "b" | "c"[]` (array só no último membro da união, não da união
+  inteira) — dormant até agora, mas a migration de perfis desta mesma
+  leva foi o primeiro argumento de RPC array do projeto a acender esse
+  caminho.
+- **`packages/ui/dialog.tsx`**: `ConfirmDialog` fechava antes de uma
+  `onConfirm` assíncrona (Server Action) terminar — qualquer erro dela
+  nunca aparecia em lugar nenhum. Agora espera resolver, com spinner/
+  desabilitado nos botões enquanto pendente.
+- **`packages/ui/toast.tsx`**: o timer de auto-dismiss nunca era limpo no
+  fechamento manual nem no unmount do provider.
+
+Achado sinalizado mas **não corrigido de propósito** (fora do escopo de
+correção de bug): `DataTable`/`PageHeader`/`StatTile`, adicionados na Fase
+1a, ainda não são usados em nenhuma tela de `apps/web` — a duplicação de
+`<table>` que deveriam substituir continua existindo. Candidato pra Fase
+2b/3, não pra uma correção pontual.
+
 ## Fases do projeto — o que falta
 
 Todas as fases planejadas foram concluídas ou encerradas por decisão.
@@ -445,6 +502,10 @@ validação do parser contra XML real.
   categorias em `create_company`), Fase 5 (relatório por categoria, centro
   de custo/contraparte, transferência entre contas, cancelar nota importada
   por engano, paginação).
+- **`DataTable`/`PageHeader`/`StatTile`** (`packages/ui`, Fase 1a) existem e
+  são exportados, mas nenhuma tela de `apps/web` os usa ainda — achado pela
+  revisão noturna de 28/08, ver seção acima. A duplicação de `<table>`/
+  cabeçalho que eles deveriam substituir continua espalhada em ~5 telas.
 - **Web mobile**: alvo de toque e menu dedicado (barra de abas) já feitos —
   ver seção acima. Falta só testar de verdade num aparelho; este sandbox não
   tem `docker` (`docker ps` falha), então não dá pra subir Supabase local e
