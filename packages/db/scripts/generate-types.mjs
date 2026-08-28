@@ -85,7 +85,12 @@ function tsType(udtName, isArray) {
         return "string";
     }
   })();
-  return isArray ? `${base}[]` : base;
+  // An enum's `base` is a `"a" | "b" | "c"` union — appended directly with
+  // no parens, `${base}[]` parses in TS as `"a" | "b" | ("c"[])`, an array
+  // type on the last member only, not an array of the union. Every other
+  // branch above returns a single identifier, where `X[]` is unambiguous.
+  if (!isArray) return base;
+  return base.includes(" | ") ? `(${base})[]` : `${base}[]`;
 }
 
 async function columnsOf(tableName) {
