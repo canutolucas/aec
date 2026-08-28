@@ -42,15 +42,15 @@ export default async function FaturamentoPage({
       <div>
         <h1 className="text-xl font-semibold">Faturamento</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Importe o XML de cada nota fiscal emitida. O recebimento e conciliado em Recebimentos,
+          Importe o XML de cada nota fiscal emitida. O recebimento é conciliado em Recebimentos,
           quando o extrato do banco chegar.
         </p>
       </div>
 
       {!podeImportar && (
         <Alert tone="info">
-          Seu perfil pode consultar, mas nao pode importar notas fiscais. Peca a um assistente,
-          contador ou responsavel.
+          Seu perfil pode consultar, mas não pode importar notas fiscais. Peça a um assistente,
+          contador ou responsável.
         </Alert>
       )}
 

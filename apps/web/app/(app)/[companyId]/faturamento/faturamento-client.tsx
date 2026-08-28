@@ -10,7 +10,18 @@
 import { INVOICE_STATUS_LABELS, type InvoiceBalance } from "@aec/db";
 import { fromDb } from "@aec/domain";
 import { decodeInvoiceXml } from "@aec/statements";
-import { Alert, Badge, Card, CardHeader, Dropzone, EmptyState, Money } from "@aec/ui";
+import {
+  Alert,
+  Badge,
+  Card,
+  CardHeader,
+  Dropzone,
+  EmptyState,
+  Money,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@aec/ui";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -138,7 +149,18 @@ export function FaturamentoClient({
             >
               {vencidas}
             </p>
-            <p className="text-muted-foreground text-xs">Vencidas (+45 dias)</p>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="text-muted-foreground w-fit cursor-help text-xs underline decoration-dotted">
+                  Vencidas (+45 dias)
+                </p>
+              </TooltipTrigger>
+              <TooltipContent>
+                A nota fiscal não declara vencimento — 45 dias é uma folga além do mês seguinte (o
+                prazo que a maioria dos clientes paga), pra não marcar como vencida uma nota que
+                ainda está dentro do normal.
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </Card>

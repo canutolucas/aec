@@ -130,7 +130,7 @@ export const ROLE_LABELS: Record<MemberRole, string> = {
   cliente_leitura: "Cliente (somente leitura)",
   assistente: "Assistente",
   contador: "Contador",
-  owner: "Responsavel",
+  owner: "Responsável",
 };
 
 export const ACCOUNT_KIND_LABELS: Record<BankAccountKind, string> = {

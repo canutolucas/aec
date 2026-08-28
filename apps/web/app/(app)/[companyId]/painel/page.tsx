@@ -211,11 +211,11 @@ export default async function PainelPage({
         <Alert tone="info">
           {aConciliar > 0 && (
             <>
-              {aConciliar} lancamento(s) ainda nao conciliados com o extrato do banco
+              {aConciliar} lançamento(s) ainda não conciliados com o extrato do banco
               {linhasPendentes > 0 ? "; " : "."}
             </>
           )}
-          {linhasPendentes > 0 && <>{linhasPendentes} linha(s) do extrato aguardando tratamento.</>}{" "}
+          {linhasPendentes > 0 && <>{linhasPendentes} movimento(s) do extrato sem revisar.</>}{" "}
           <Link
             href={routes.reconciliation(companyId)}
             className="underline underline-offset-2 hover:no-underline"

@@ -153,8 +153,8 @@ export function ContasClient({
         </Card>
       ) : (
         <Alert tone="info">
-          Seu perfil nao permite cadastrar ou editar contas bancarias. Peca a quem tem perfil de
-          contador ou responsavel.
+          Seu perfil não permite cadastrar ou editar contas bancárias. Peça a quem tem perfil de
+          contador ou responsável.
         </Alert>
       )}
     </div>

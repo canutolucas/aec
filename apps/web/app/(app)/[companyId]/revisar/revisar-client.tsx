@@ -323,7 +323,9 @@ function PareamentoCard({
   return (
     <Card>
       <CardHeader
-        title={item.match.confidence === "exact" ? "Coincidência exata" : "Pareamento sugerido"}
+        title={
+          item.match.confidence === "exact" ? "Coincidência exata" : "Correspondência sugerida"
+        }
       />
       <div className="grid gap-4 p-6">
         <div className="grid gap-3 sm:grid-cols-2">

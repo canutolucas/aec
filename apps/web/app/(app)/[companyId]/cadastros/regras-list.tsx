@@ -39,7 +39,7 @@ export function RegrasList({
         >
           <div className="grid gap-1 text-sm">
             <p className="font-medium">
-              Memo contem &ldquo;{rule.match_text}&rdquo;
+              Histórico do banco contém &ldquo;{rule.match_text}&rdquo;
               {rule.category_id && categoryNameById.has(rule.category_id) && (
                 <> → {categoryNameById.get(rule.category_id)}</>
               )}

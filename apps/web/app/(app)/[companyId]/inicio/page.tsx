@@ -194,12 +194,12 @@ export default async function InicioPage({ params }: { params: Promise<{ company
 
       {!canUpload ? (
         <Alert tone="info">
-          Seu perfil pode consultar, mas nao subir extratos. Peca a um assistente, contador ou
-          responsavel pela empresa.
+          Seu perfil pode consultar, mas não pode subir extratos. Peça a um assistente, contador ou
+          responsável pela empresa.
         </Alert>
       ) : accounts.length === 0 ? (
         <Alert tone="warn">
-          Nenhuma conta bancaria cadastrada ainda. Peca a um contador ou responsavel para cadastrar
+          Nenhuma conta bancária cadastrada ainda. Peça a um contador ou responsável para cadastrar
           a conta antes de subir o primeiro extrato.
         </Alert>
       ) : (

@@ -152,13 +152,13 @@ export function CadastrosClient({
       </Card>
 
       <Card>
-        <CardHeader title={`Contrapartes (${counterparties.length})`} />
+        <CardHeader title={`Clientes e fornecedores (${counterparties.length})`} />
         <RecordTable
           items={counterparties}
           disabled={isPending}
           canEdit={canEditOperational}
-          emptyTitle="Nenhuma contraparte cadastrada"
-          emptyDescription="Fornecedores e clientes recorrentes — util para relatorio e para a regra de categorizacao."
+          emptyTitle="Nenhum cliente ou fornecedor cadastrado"
+          emptyDescription="Fornecedores e clientes recorrentes — útil para relatório e para a regra de categorização."
           renderRow={(item) => (
             <>
               <span className="font-medium">{item.name}</span>
@@ -168,7 +168,7 @@ export function CadastrosClient({
           onDeactivate={(item) =>
             runAction(
               () => desativarContraparte(companyId, item.id),
-              `Contraparte "${item.name}" desativada.`,
+              `"${item.name}" desativado(a).`,
             )
           }
         />
@@ -178,7 +178,7 @@ export function CadastrosClient({
             onSubmit={(name, taxId) =>
               runAction(
                 () => criarContraparte({ companyId, name, taxId }),
-                `Contraparte "${name}" cadastrada.`,
+                `"${name}" cadastrado(a).`,
               )
             }
           />
@@ -186,7 +186,7 @@ export function CadastrosClient({
       </Card>
 
       <Card>
-        <CardHeader title={`Regras de categorizacao aprendidas (${matchingRules.length})`} />
+        <CardHeader title={`Regras de categorização aprendidas (${matchingRules.length})`} />
         <RegrasList
           matchingRules={matchingRules}
           categoryNameById={categoryNameById}
@@ -351,7 +351,7 @@ function NewCounterpartyForm({
       }}
       className="border-border grid gap-3 border-t p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end"
     >
-      <Field label="Nome">
+      <Field label="Nome do cliente ou fornecedor">
         <Input
           value={name}
           onChange={(event) => setName(event.target.value)}
@@ -363,12 +363,12 @@ function NewCounterpartyForm({
         <Input
           value={taxId}
           onChange={(event) => setTaxId(event.target.value)}
-          placeholder="Somente numeros"
+          placeholder="Somente números"
           disabled={disabled}
         />
       </Field>
       <Button type="submit" size="sm" disabled={disabled || !name.trim()}>
-        Cadastrar contraparte
+        Cadastrar
       </Button>
     </form>
   );

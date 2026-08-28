@@ -293,7 +293,8 @@ function ProximaAcao({
     revisar: {
       icon: FileCheck2,
       titulo: `${linhasPendentes} movimento(s) do extrato esperam sua revisão`,
-      descricao: "Pareamento incerto ou sem categoria — o resto o sistema já organizou sozinho.",
+      descricao:
+        "Correspondência incerta ou sem categoria — o resto o sistema já organizou sozinho.",
       acaoLabel: "Revisar agora",
       href: routes.reviewQueue(companyId),
     },

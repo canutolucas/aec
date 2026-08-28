@@ -421,8 +421,8 @@ export function InicioClient({
           <Card>
             <CardHeader title="Resumo" />
             <div className="grid gap-4 p-4 sm:grid-cols-3">
-              <Resumo label="Lancamentos criados" value={session.created} />
-              <Resumo label="Pareamentos confirmados" value={session.reconciled} />
+              <Resumo label="Lançamentos criados" value={session.created} />
+              <Resumo label="Correspondências confirmadas" value={session.reconciled} />
               <Resumo
                 label="Pendencias"
                 value={
@@ -493,7 +493,7 @@ export function InicioClient({
             <>
               {session.suggested.length > 0 && (
                 <Card>
-                  <CardHeader title={`Confirmar pareamento (${session.suggested.length})`} />
+                  <CardHeader title={`Confirmar correspondência (${session.suggested.length})`} />
                   <div className="divide-border divide-y">
                     {session.suggested.map((item) => (
                       <div

@@ -10,6 +10,14 @@
  */
 
 import { type MemberRole, ROLE_LABELS } from "@aec/db";
+
+const ROLE_DESCRICOES: Record<MemberRole, string> = {
+  cliente_leitura: "Só consulta — não lança, não confirma, não fecha mês.",
+  assistente:
+    "Lança, importa extrato e confirma correspondências, mas não fecha o mês nem cadastra conta.",
+  contador: "Faz tudo do assistente, mais fechar/reabrir o mês e cadastrar conta bancária.",
+  owner: "Faz tudo, mais adicionar/remover integrante e ligar/desligar o modo simples de cada um.",
+};
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -92,8 +100,8 @@ export function EquipeClient({
         <CardHeader title={`Integrantes (${members.length})`} />
         {canManage && (
           <p className="text-muted-foreground border-border border-b px-4 py-2 text-xs">
-            Modo simples: a pessoa so ve a tela de subir extrato, sem Painel, Lancamentos, Contas,
-            Conciliacao, Relatorios ou Cadastros.
+            Modo simples: esconde a aba Cadastros (categorias, contrapartes, centros de custo) — o
+            resto da navegação continua igual pra qualquer papel.
           </p>
         )}
         <div className="divide-border divide-y">
@@ -111,7 +119,12 @@ export function EquipeClient({
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-muted-foreground text-xs">{ROLE_LABELS[member.role]}</span>
+                <span
+                  className="text-muted-foreground text-xs"
+                  title={ROLE_DESCRICOES[member.role]}
+                >
+                  {ROLE_LABELS[member.role]}
+                </span>
                 {canManage && (
                   <label className="flex items-center gap-1.5 text-xs">
                     <input
@@ -143,10 +156,7 @@ export function EquipeClient({
             onSubmit={adicionar}
             className="border-border grid gap-3 border-t p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end"
           >
-            <Field
-              label="E-mail"
-              hint="A pessoa precisa ja ter uma conta criada (Supabase Auth) com este e-mail."
-            >
+            <Field label="E-mail" hint="A pessoa precisa já ter uma conta criada com este e-mail.">
               <Input
                 type="email"
                 value={email}
@@ -155,7 +165,7 @@ export function EquipeClient({
                 disabled={isPending}
               />
             </Field>
-            <Field label="Papel">
+            <Field label="Papel" hint={ROLE_DESCRICOES[role]}>
               <Select
                 value={role}
                 onChange={(event) => setRole(event.target.value as MemberRole)}

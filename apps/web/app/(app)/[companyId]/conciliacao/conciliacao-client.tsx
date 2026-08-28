@@ -185,7 +185,7 @@ export function ReconciliationClient({
       const parts: string[] = [];
       if (applied.ok) {
         if ((applied.reconciled ?? 0) > 0) {
-          parts.push(`${applied.reconciled} pareamento(s) confirmado(s) automaticamente`);
+          parts.push(`${applied.reconciled} correspondência(s) confirmada(s) automaticamente`);
         }
         if ((applied.created ?? 0) > 0) {
           parts.push(`${applied.created} lançamento(s) criado(s) automaticamente`);
@@ -205,14 +205,14 @@ export function ReconciliationClient({
       const result = await autoApplyReconciliation({ companyId, bankAccountId: accountId });
       if (!result.ok) {
         setFeedback({
-          text: result.error ?? "Nao foi possivel aplicar automaticamente.",
+          text: result.error ?? "Nao foi possivel organizar automaticamente.",
           tone: "error",
         });
         return;
       }
       const parts: string[] = [];
       if ((result.reconciled ?? 0) > 0) {
-        parts.push(`${result.reconciled} pareamento(s) confirmado(s)`);
+        parts.push(`${result.reconciled} correspondência(s) confirmada(s)`);
       }
       if ((result.created ?? 0) > 0) parts.push(`${result.created} lançamento(s) criado(s)`);
       const failedCount = result.exceptions?.failed.length ?? 0;
@@ -414,7 +414,7 @@ export function ReconciliationClient({
               Prévia: {statement.lines.length} movimentações encontradas
             </p>
             <p className="text-muted-foreground mt-1 text-sm">
-              {previewMatch?.matched.length ?? 0} pareamentos exatos e{" "}
+              {previewMatch?.matched.length ?? 0} correspondências exatas e{" "}
               {previewMatch?.suggested.length ?? 0} sugestões. A confirmação continua manual.
             </p>
             {statement.integrity && !statement.integrity.ok && (
@@ -486,15 +486,15 @@ export function ReconciliationClient({
                 onClick={runAutoApply}
                 disabled={!canEdit || isPending}
               >
-                Aplicar automaticamente
+                Organizar o que dá sozinho
               </Button>
             )
           }
         />
         {(suggestions.length > 0 || unmatchedLines.length > 0) && (
           <p className="text-muted-foreground px-4 pt-3 text-xs">
-            Confirma pareamento exato e cria lançamento onde já existe regra com categoria — nas
-            duas seções abaixo. Só fica pra revisar na mão o que o sistema não tem certeza.
+            Confirma correspondência exata e cria lançamento onde já existe regra com categoria —
+            nas duas seções abaixo. Só fica pra revisar na mão o que o sistema não tem certeza.
           </p>
         )}
         {suggestions.length === 0 ? (
@@ -510,7 +510,7 @@ export function ReconciliationClient({
                 className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between"
               >
                 <div className="grid gap-1 text-sm">
-                  <p className="font-medium">{match.line.memo || "Movimento sem historico"}</p>
+                  <p className="font-medium">{match.line.memo || "Movimento sem histórico"}</p>
                   <p className="text-muted-foreground">
                     Extrato: {formatDate(match.line.posted_at)} ·{" "}
                     {formatBRL(fromDb(match.line.amount))}
@@ -543,7 +543,7 @@ export function ReconciliationClient({
         {unmatchedLines.length === 0 ? (
           <EmptyState
             title="Nenhuma linha sem par"
-            description="Toda linha pendente do extrato encontrou uma sugestão de pareamento acima."
+            description="Toda linha pendente do extrato encontrou uma sugestão de correspondência acima."
           />
         ) : (
           <div className="divide-border divide-y">
