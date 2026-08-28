@@ -16,6 +16,8 @@ import { Alert, Card, CardHeader, EmptyState, LinkButton, Money } from "@/lib/ui
 import { formatDate, formatMonth } from "@/lib/ui/format";
 import { routes } from "@/lib/ui/routes";
 
+import { SubNav } from "../sub-nav";
+
 export const metadata = { title: "Painel — Controle Bancario" };
 
 const HORIZONTE_DIAS = 30;
@@ -29,7 +31,7 @@ export default async function PainelPage({
 }) {
   const { companyId } = await params;
   const filtros = await searchParams;
-  await requireAdvancedAccess(companyId);
+  const session = await requireAdvancedAccess(companyId);
 
   const hoje = todayInBrazil();
   const inicioDoMes = startOfMonth(hoje);
@@ -168,6 +170,8 @@ export default async function PainelPage({
 
   return (
     <div className="space-y-6">
+      <SubNav group="relatorios" active="painel" companyId={companyId} session={session} />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Indicador titulo="Saldo hoje" valor={saldoAtual} />
         <Indicador titulo={`Entradas de ${formatMonth(inicioDoMes)}`} valor={entradasDoMes} />

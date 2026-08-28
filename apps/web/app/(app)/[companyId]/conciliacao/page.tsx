@@ -14,6 +14,7 @@ import { createServerSupabase } from "@/lib/db/supabase";
 import { PERFIL_PARAM, resolvePerfilSelecao } from "@/lib/ui/account-profiles";
 import { Alert } from "@/lib/ui/components";
 
+import { SubNav } from "../sub-nav";
 import { ReconciliationClient } from "./conciliacao-client";
 
 export const metadata = { title: "Conciliacao — Controle Bancario" };
@@ -182,6 +183,8 @@ export default async function ReconciliationPage({
 
   return (
     <div className="space-y-6">
+      <SubNav group="movimentos" active="conciliacao" companyId={companyId} session={session} />
+
       <div>
         <h1 className="text-xl font-semibold">Conciliação bancária</h1>
         <p className="text-muted-foreground mt-1 text-sm">

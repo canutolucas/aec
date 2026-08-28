@@ -92,15 +92,23 @@ export async function requireCompany(companyId: string): Promise<SessionContext>
 }
 
 /**
- * Igual a requireCompany, mas manda quem esta no modo simples de volta para
- * /inicio — usado no topo de toda pagina que so faz sentido no fluxo
- * avancado (Contas, Lancamentos, Conciliacao, Relatorios, Cadastros, Equipe,
- * Painel). Conveniencia de navegacao, como o resto deste arquivo: quem
- * decide o que a pessoa pode LER OU ESCREVER continua sendo role + RLS,
- * nao simpleMode.
+ * Ate a Fase 2b da reforma de UI/UX, isto mandava quem estava no modo
+ * simples de volta para /inicio — simpleMode produzia duas interfaces
+ * inteiras, e 7 das 11 telas do sistema (Contas, Lancamentos, Conciliacao,
+ * Relatorios, Cadastros, Equipe, Painel) ficavam inalcancaveis pra quem
+ * estava nele. Fase 2b unifica a navegacao (ver
+ * apps/web/lib/ui/nav-groups.ts): agora toda tela avancada aparece pra
+ * todo mundo, e simpleMode vira so uma preferencia que esconde a aba
+ * Cadastros dentro de Ajustes (o unico "ajuste avancado" de verdade —
+ * Contas e Regras continuam sempre visiveis, sao operacao do dia a dia).
+ *
+ * A funcao continua existindo (em vez de trocar as ~7 chamadas por
+ * requireCompany direto) so pra marcar, no proprio nome do import de cada
+ * pagina, que aquela tela e conceitualmente "avancada" — mas o
+ * comportamento e identico a requireCompany hoje. Conveniencia de
+ * navegacao, como o resto deste arquivo: quem decide o que a pessoa pode
+ * LER OU ESCREVER sempre foi role + RLS, nunca simpleMode.
  */
 export async function requireAdvancedAccess(companyId: string): Promise<SessionContext> {
-  const session = await requireCompany(companyId);
-  if (session.simpleMode) redirect(routes.home(companyId));
-  return session;
+  return requireCompany(companyId);
 }

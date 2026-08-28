@@ -4,6 +4,7 @@ import { requireCompany } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 import { Alert } from "@/lib/ui/components";
 
+import { SubNav } from "../sub-nav";
 import { RecebimentosClient } from "./recebimentos-client";
 
 export const metadata = { title: "Recebimentos — Controle Bancario" };
@@ -32,6 +33,8 @@ export default async function RecebimentosPage({
 
   return (
     <div className="space-y-6">
+      <SubNav group="notas" active="recebimentos" companyId={companyId} session={session} />
+
       <div>
         <h1 className="text-xl font-semibold">Recebimentos</h1>
         <p className="text-muted-foreground mt-1 text-sm">

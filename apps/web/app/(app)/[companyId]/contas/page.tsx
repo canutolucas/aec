@@ -3,6 +3,7 @@ import { type AccountBalance, type BankAccount, hasRole, listAccountProfiles } f
 import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 
+import { SubNav } from "../sub-nav";
 import { ContasClient } from "./contas-client";
 import { PerfisCard } from "./perfis-card";
 
@@ -33,6 +34,8 @@ export default async function ContasPage({ params }: { params: Promise<{ company
 
   return (
     <div className="space-y-6">
+      <SubNav group="ajustes" active="contas" companyId={companyId} session={session} />
+
       <ContasClient
         companyId={companyId}
         podeEditar={podeEditar}

@@ -1,56 +1,16 @@
-import { hasRole, listAccountProfiles, ROLE_LABELS } from "@aec/db";
-import { cn, Logo, ThemeToggle } from "@aec/ui";
+import { listAccountProfiles, ROLE_LABELS } from "@aec/db";
+import { Logo, ThemeToggle } from "@aec/ui";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { requireCompany } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
+import { topLevelNav } from "@/lib/ui/nav-groups";
 import { routes } from "@/lib/ui/routes";
 
 import { MobileTabBar } from "./mobile-tab-bar";
 import { PerfilSelector } from "./perfil-selector";
-
-const NAV = [
-  { key: "hoje", label: "Hoje", href: routes.today },
-  { key: "painel", label: "Painel", href: routes.dashboard },
-  { key: "lancamentos", label: "Lancamentos", href: (id: string) => routes.transactions(id) },
-  { key: "contas", label: "Contas", href: routes.accounts },
-  { key: "conciliacao", label: "Conciliacao", href: routes.reconciliation },
-  { key: "faturamento", label: "Faturamento", href: routes.invoices },
-  { key: "recebimentos", label: "Recebimentos", href: routes.receivables },
-  { key: "relatorios", label: "Relatorios", href: routes.reports },
-  { key: "cadastros", label: "Cadastros", href: routes.registries },
-  { key: "equipe", label: "Equipe", href: routes.team },
-] as const;
-
-/**
- * No modo simples so existem tres paginas: Inicio, e Faturamento/
- * Recebimentos — essas duas ficam de fora de requireAdvancedAccess de
- * proposito (equipe/faturamento/recebimentos/page.tsx usam requireCompany),
- * porque sao tarefa do dia a dia de quem opera o sistema no modo simples,
- * nao um recurso avancado. Os outros 4 itens levam a telas que
- * requireAdvancedAccess() ja redireciona de volta pra ca, entao mostra-los
- * aqui so criaria um link que bate e volta.
- *
- * Equipe e outra excecao: e a unica tela que desliga o modo simples
- * (alternarModoSimples), e por isso o proprio equipe/page.tsx tambem NAO usa
- * requireAdvancedAccess — sem ela visivel aqui, um owner que ligasse o modo
- * simples em si mesmo ficaria sem nenhum link de volta, so um URL digitado
- * a mao. So aparece para quem tem papel de owner (quem realmente pode usar
- * o controle la dentro).
- */
-function simpleNav(role: Parameters<typeof hasRole>[0]) {
-  const base = [
-    { key: "hoje", label: "Hoje", href: routes.today },
-    { key: "inicio", label: "Inicio", href: routes.home },
-    { key: "faturamento", label: "Faturamento", href: routes.invoices },
-    { key: "recebimentos", label: "Recebimentos", href: routes.receivables },
-  ] as const;
-  return hasRole(role, "owner")
-    ? ([...base, { key: "equipe", label: "Equipe", href: routes.team }] as const)
-    : base;
-}
 
 export default async function CompanyLayout({
   children,
@@ -67,6 +27,14 @@ export default async function CompanyLayout({
   // nao aplicada em producao) derrubaria TODA pagina da empresa, nao so o
   // seletor de perfis. Sem perfil nenhum, o seletor global so fica oculto.
   const perfis = await listAccountProfiles(supabaseSSR, companyId).catch(() => []);
+
+  // Fase 2b: uma navegacao so, pra qualquer papel e qualquer modo — ver
+  // apps/web/lib/ui/nav-groups.ts. 9-11 itens (Hoje, Painel, Lancamentos,
+  // Contas, Conciliacao, Faturamento, Recebimentos, Relatorios, Cadastros,
+  // Equipe) viram 5 grupos (Hoje sozinho + 4 com sub-abas); simpleMode nao
+  // troca mais a navegacao inteira, so esconde a aba Cadastros dentro de
+  // Ajustes.
+  const nav = topLevelNav(session.role, session.simpleMode);
 
   async function sair() {
     "use server";
@@ -112,22 +80,16 @@ export default async function CompanyLayout({
         </div>
 
         {/*
-         * Com 9 itens (menu avancado), a lista nao cabe na largura de um
-         * celular. Acima de `md:` continua a rolagem horizontal
-         * (`overflow-x-auto` + `flex-nowrap`, o padrao ja usado nas tabelas
-         * largas do sistema); abaixo de `md:` esse `<nav>` some e da lugar a
-         * <MobileTabBar>, a barra de abas fixa no rodape. No modo simples
-         * (3-4 itens) a lista ja cabe numa linha em qualquer largura, entao
-         * fica so a rolagem, sem barra dedicada.
+         * 5 itens cabem numa linha em qualquer largura de desktop — a
+         * rolagem horizontal (`overflow-x-auto`) fica so como rede de
+         * seguranca pra uma tela bem estreita. Abaixo de `md:` esse `<nav>`
+         * some e da lugar a <MobileTabBar>, a mesma barra de abas fixa no
+         * rodape pra qualquer papel/modo agora (antes so existia no modo
+         * avancado).
          */}
-        <nav
-          className={cn(
-            "mx-auto max-w-7xl overflow-x-auto px-4",
-            !session.simpleMode && "hidden md:block",
-          )}
-        >
+        <nav className="mx-auto hidden max-w-7xl overflow-x-auto px-4 md:block">
           <ul className="flex flex-nowrap gap-1">
-            {(session.simpleMode ? simpleNav(session.role) : NAV).map((item) => (
+            {nav.map((item) => (
               <li key={item.key} className="shrink-0">
                 <Link
                   href={item.href(companyId)}
@@ -141,7 +103,7 @@ export default async function CompanyLayout({
         </nav>
       </header>
 
-      {!session.simpleMode && <MobileTabBar companyId={companyId} />}
+      <MobileTabBar companyId={companyId} role={session.role} simpleMode={session.simpleMode} />
 
       {/* pb-20 no celular pra conteudo nao ficar embaixo da MobileTabBar fixa; pt-6/pb-6 explicitos (em vez de py-6) pra nao colidir com o pb-20/md:pb-6 na mesma propriedade */}
       <main className="mx-auto max-w-7xl px-4 pt-6 pb-20 md:pb-6">{children}</main>

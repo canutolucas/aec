@@ -9,6 +9,7 @@ import {
 import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 
+import { SubNav } from "../sub-nav";
 import { CadastrosClient } from "./cadastros-client";
 
 export const metadata = { title: "Cadastros — Controle Bancario" };
@@ -34,17 +35,21 @@ export default async function CadastrosPage({
   ]);
 
   return (
-    <CadastrosClient
-      companyId={companyId}
-      categories={categories}
-      costCenters={costCenters}
-      counterparties={counterparties}
-      matchingRules={matchingRules}
-      // Categorias e centros de custo (plano de contas) exigem contador;
-      // contrapartes e regras de categorizacao ja aceitam assistente — a
-      // mesma distincao que as policies de RLS fazem no banco.
-      canEditChartOfAccounts={hasRole(session.role, "contador")}
-      canEditOperational={hasRole(session.role, "assistente")}
-    />
+    <div className="space-y-6">
+      <SubNav group="ajustes" active="cadastros" companyId={companyId} session={session} />
+
+      <CadastrosClient
+        companyId={companyId}
+        categories={categories}
+        costCenters={costCenters}
+        counterparties={counterparties}
+        matchingRules={matchingRules}
+        // Categorias e centros de custo (plano de contas) exigem contador;
+        // contrapartes e regras de categorizacao ja aceitam assistente — a
+        // mesma distincao que as policies de RLS fazem no banco.
+        canEditChartOfAccounts={hasRole(session.role, "contador")}
+        canEditOperational={hasRole(session.role, "assistente")}
+      />
+    </div>
   );
 }

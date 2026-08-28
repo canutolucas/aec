@@ -15,6 +15,7 @@ import { PERFIL_PARAM, resolvePerfilSelecao } from "@/lib/ui/account-profiles";
 import { Alert, Card, CardHeader, EmptyState, Money } from "@/lib/ui/components";
 import { formatMonth } from "@/lib/ui/format";
 
+import { SubNav } from "../sub-nav";
 import { FechamentoMes } from "./fechamento-mes";
 import { FiltroMes } from "./filtro-mes";
 import { LancamentoRapido } from "./lancamento-rapido";
@@ -127,6 +128,8 @@ export default async function LancamentosPage({
 
   return (
     <div className="space-y-6">
+      <SubNav group="movimentos" active="lancamentos" companyId={companyId} session={session} />
+
       <FiltroMes companyId={companyId} mes={primeiroDia} conta={filtros.conta} contas={contas} />
 
       {mesFechado && (

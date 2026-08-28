@@ -15,6 +15,7 @@ import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 import { PERFIL_PARAM, resolvePerfilSelecao } from "@/lib/ui/account-profiles";
 
+import { SubNav } from "../sub-nav";
 import { FiltroPeriodo } from "./filtro-periodo";
 import { FluxoDeCaixaClient } from "./fluxo-de-caixa-client";
 
@@ -29,7 +30,7 @@ export default async function RelatoriosPage({
 }) {
   const { companyId } = await params;
   const filtros = await searchParams;
-  await requireAdvancedAccess(companyId);
+  const session = await requireAdvancedAccess(companyId);
 
   const hoje = todayInBrazil();
   // Um valor invalido na URL (digitado a mao, um bookmark velho) nao pode
@@ -128,6 +129,8 @@ export default async function RelatoriosPage({
 
   return (
     <div className="space-y-6">
+      <SubNav group="relatorios" active="fluxo" companyId={companyId} session={session} />
+
       <FiltroPeriodo
         companyId={companyId}
         de={de}

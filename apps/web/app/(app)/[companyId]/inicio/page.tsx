@@ -8,6 +8,7 @@ import { Alert, Money } from "@/lib/ui/components";
 import { formatDate, isInvoiceOverdue } from "@/lib/ui/format";
 import { routes } from "@/lib/ui/routes";
 
+import { SubNav } from "../sub-nav";
 import { InicioClient } from "./inicio-client";
 import { InstallHint } from "./install-hint";
 
@@ -120,6 +121,8 @@ export default async function InicioPage({ params }: { params: Promise<{ company
 
   return (
     <div className="space-y-6">
+      <SubNav group="movimentos" active="inicio" companyId={companyId} session={session} />
+
       <div>
         <h1 className="text-xl font-semibold">Ola, {session.company.name}</h1>
         <p className="text-muted-foreground mt-1 text-sm">

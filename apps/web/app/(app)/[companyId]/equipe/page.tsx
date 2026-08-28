@@ -3,6 +3,7 @@ import { hasRole, type Membership, type Profile } from "@aec/db";
 import { requireCompany } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 
+import { SubNav } from "../sub-nav";
 import { EquipeClient } from "./equipe-client";
 
 export const metadata = { title: "Equipe — Controle Bancario" };
@@ -12,15 +13,12 @@ export interface MembershipWithProfile extends Membership {
 }
 
 /**
- * Deliberadamente requireCompany, NAO requireAdvancedAccess: e aqui que
- * mora o unico jeito de desligar o modo simples (alternarModoSimples,
- * abaixo). Se esta pagina fosse gateada por simpleMode como as outras 6
- * telas avancadas, um owner que ligasse o modo simples em si mesmo ficaria
- * trancado para sempre — redirecionado de volta pra /inicio ao tentar
- * chegar na unica tela que desfaria isso. Um assistente em modo simples
- * ainda pode abrir esta URL, mas so ve a lista (sem controles de gerenciar,
- * ja restritos a canManage = owner abaixo) — inofensivo, e o preco de
- * manter a porta de saida sempre aberta para quem pode usa-la.
+ * requireCompany, nao requireAdvancedAccess (que desde a Fase 2b e um
+ * alias do proprio requireCompany — ver session.ts). E aqui que mora o
+ * unico jeito de desligar o modo simples (alternarModoSimples, abaixo); a
+ * aba "Equipe" dentro de Ajustes (nav-groups.ts) so aparece pra quem tem
+ * papel de owner, mas a URL continua acessivel na mao pra qualquer membro
+ * — so ve a lista, sem controles de gerenciar (canManage = owner abaixo).
  */
 export default async function EquipePage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
@@ -37,11 +35,15 @@ export default async function EquipePage({ params }: { params: Promise<{ company
   if (error) throw error;
 
   return (
-    <EquipeClient
-      companyId={companyId}
-      currentUserId={session.userId}
-      members={data ?? []}
-      canManage={hasRole(session.role, "owner")}
-    />
+    <div className="space-y-6">
+      <SubNav group="ajustes" active="equipe" companyId={companyId} session={session} />
+
+      <EquipeClient
+        companyId={companyId}
+        currentUserId={session.userId}
+        members={data ?? []}
+        canManage={hasRole(session.role, "owner")}
+      />
+    </div>
   );
 }
