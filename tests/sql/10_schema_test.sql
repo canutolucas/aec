@@ -176,6 +176,131 @@ do $$ begin perform pg_temp.assert(
 reset role;
 
 \echo ''
+\echo '== Perfis de contas (lentes gerenciais) =='
+set role authenticated;
+
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$insert into public.account_profiles (company_id, name)
+     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Servicos por fora')$q$,
+  'assistente nao cria perfil (exige contador)'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('11111111-1111-1111-1111-111111111111',
+    $q$insert into public.account_profiles (id, company_id, name)
+       values ('d1d1d1d1-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Servicos por fora')$q$) = 1,
+  'owner (rank acima de contador) cria perfil'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('11111111-1111-1111-1111-111111111111',
+    $q$insert into public.account_profile_accounts (company_id, profile_id, bank_account_id) values
+       ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'd1d1d1d1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001'),
+       ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'd1d1d1d1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000002')$q$) = 2,
+  'owner agrupa duas contas no mesmo perfil (a mesma conta pode entrar em mais de um perfil depois -- N:N)'
+); end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$insert into public.account_profile_accounts (company_id, profile_id, bank_account_id)
+     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'd1d1d1d1-0000-0000-0000-000000000001', 'a1a1a1a1-0000-0000-0000-000000000001')$q$,
+  'assistente nao mexe em quais contas entram num perfil'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.count_as('33333333-3333-3333-3333-333333333333', 'select 1 from public.account_profiles') = 1,
+  'cliente_leitura enxerga o perfil (leitura livre para qualquer membro)'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.count_as('44444444-4444-4444-4444-444444444444', 'select 1 from public.account_profiles') = 0,
+  'perfil da Empresa A nao vaza para a Empresa B'
+); end $$;
+
+-- create_account_profile: o caminho que a tela de fato usa (cria o perfil e
+-- ja vincula as contas na mesma transacao).
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.create_account_profile('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Contabil empresarial',
+     array['a1a1a1a1-0000-0000-0000-000000000001']::uuid[])$q$,
+  'assistente nao chama create_account_profile'
+); end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '11111111-1111-1111-1111-111111111111',
+  $q$select public.create_account_profile('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '   ',
+     array['a1a1a1a1-0000-0000-0000-000000000001']::uuid[])$q$,
+  'create_account_profile recusa nome vazio'
+); end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '11111111-1111-1111-1111-111111111111',
+  $q$select public.create_account_profile('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Perfil sem conta', array[]::uuid[])$q$,
+  'create_account_profile recusa perfil sem nenhuma conta'
+); end $$;
+
+do $$ begin perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+  $q$select public.create_account_profile('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Contabil empresarial',
+     array['a1a1a1a1-0000-0000-0000-000000000001']::uuid[])$q$
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.value_as('11111111-1111-1111-1111-111111111111',
+    $q$select count(*) from public.account_profile_accounts apa
+       join public.account_profiles ap on ap.id = apa.profile_id
+       where ap.company_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and ap.name = 'Contabil empresarial'$q$
+  )::int = 1,
+  'create_account_profile grava perfil + vinculo numa chamada so'
+); end $$;
+
+-- set_account_profile_accounts: substitui o conjunto de contas do perfil
+-- criado acima (que tinha so a conta 1) pela conta 2 -- prova que troca, nao
+-- acumula.
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.set_account_profile_accounts('d1d1d1d1-0000-0000-0000-000000000001',
+     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', array['a1a1a1a1-0000-0000-0000-000000000002']::uuid[])$q$,
+  'assistente nao chama set_account_profile_accounts'
+); end $$;
+
+do $$ begin perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+  $q$select public.set_account_profile_accounts('d1d1d1d1-0000-0000-0000-000000000001',
+     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', array['a1a1a1a1-0000-0000-0000-000000000002']::uuid[])$q$
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.value_as('11111111-1111-1111-1111-111111111111',
+    $q$select bank_account_id::text from public.account_profile_accounts
+       where profile_id = 'd1d1d1d1-0000-0000-0000-000000000001'$q$
+  ) = 'a1a1a1a1-0000-0000-0000-000000000002',
+  'set_account_profile_accounts substitui o conjunto (nao acumula com o antigo)'
+); end $$;
+
+do $$ begin perform pg_temp.expect_denied(
+  '11111111-1111-1111-1111-111111111111',
+  $q$select public.set_account_profile_accounts('00000000-0000-0000-0000-000000000000',
+     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', array['a1a1a1a1-0000-0000-0000-000000000001']::uuid[])$q$,
+  'set_account_profile_accounts recusa perfil inexistente'
+); end $$;
+
+reset role;
+
+-- Chave composta (id, company_id), como transactions x bank_accounts acima:
+-- mesmo como superusuario, um perfil da Empresa A nao consegue agrupar uma
+-- conta da Empresa B.
+do $$
+begin
+  begin
+    insert into public.account_profile_accounts (company_id, profile_id, bank_account_id)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'd1d1d1d1-0000-0000-0000-000000000001', 'b1b1b1b1-0000-0000-0000-000000000001');
+    raise exception 'FALHOU: aceitou perfil agrupando conta de outra empresa';
+  exception when foreign_key_violation then
+    raise notice '  ok: perfil nao pode agrupar conta bancaria de outra empresa';
+  end;
+end $$;
+
+\echo ''
 \echo '== Integridade entre empresas =='
 do $$ begin perform pg_temp.assert(
   (select count(*) from public.transactions) >= 0, 'sanidade'

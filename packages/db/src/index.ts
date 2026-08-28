@@ -6,6 +6,7 @@ export * from "./hooks/use-companies";
 export * from "./hooks/use-matching-rules";
 export * from "./hooks/use-statement-lines";
 export * from "./hooks/use-transactions";
+export * from "./queries/account-profiles";
 export * from "./queries/bank-accounts";
 export * from "./queries/categories";
 export * from "./queries/companies";

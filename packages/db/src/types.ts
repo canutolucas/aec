@@ -61,6 +61,9 @@ export type StatementLine = Tables["statement_lines"]["Row"];
 export type MatchingRule = Tables["matching_rules"]["Row"];
 export type Invoice = Tables["invoices"]["Row"];
 export type InvoiceSettlement = Tables["invoice_settlements"]["Row"];
+/** Uma lente gerencial agrupando contas — não confundir com `Profile` (usuário). */
+export type AccountProfile = Tables["account_profiles"]["Row"];
+export type AccountProfileAccount = Tables["account_profile_accounts"]["Row"];
 
 export type Transaction = Omit<Tables["transactions"]["Row"], "direction" | "is_transfer"> & {
   direction: TransactionDirection;

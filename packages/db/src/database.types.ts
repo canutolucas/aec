@@ -17,6 +17,97 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export interface Database {
   public: {
     Tables: {
+      account_profile_accounts: {
+        Row: {
+          id: string;
+          company_id: string;
+          profile_id: string;
+          bank_account_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id: string;
+          profile_id: string;
+          bank_account_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string;
+          profile_id?: string;
+          bank_account_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "account_profile_accounts_bank_account_fk";
+            columns: ["bank_account_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "bank_accounts";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "account_profile_accounts_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "account_profile_accounts_profile_fk";
+            columns: ["profile_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "account_profiles";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      account_profiles: {
+        Row: {
+          id: string;
+          company_id: string;
+          name: string;
+          is_active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id: string;
+          name: string;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string;
+          name?: string;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "account_profiles_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "account_profiles_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       attachments: {
         Row: {
           id: string;
@@ -1227,6 +1318,10 @@ export interface Database {
         Args: { p_company_id: string; p_period: string; p_notes?: string | null };
         Returns: Database["public"]["Tables"]["monthly_closings"]["Row"];
       };
+      create_account_profile: {
+        Args: { p_company_id: string; p_name: string; p_bank_account_ids: string[] };
+        Returns: Database["public"]["Tables"]["account_profiles"]["Row"];
+      };
       create_company: {
         Args: { p_name: string; p_legal_name?: string | null; p_tax_id?: string | null };
         Returns: Database["public"]["Tables"]["companies"]["Row"];
@@ -1263,6 +1358,10 @@ export interface Database {
       reopen_month: {
         Args: { p_company_id: string; p_period: string; p_reason: string };
         Returns: Database["public"]["Tables"]["monthly_closings"]["Row"];
+      };
+      set_account_profile_accounts: {
+        Args: { p_profile_id: string; p_company_id: string; p_bank_account_ids: string[] };
+        Returns: undefined;
       };
       settle_invoices: {
         Args: { p_transaction_id: string; p_allocations: Json };

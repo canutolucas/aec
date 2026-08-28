@@ -254,8 +254,10 @@ ${renderRow(columns)}
 /**
  * Splits `pg_get_function_arguments()`'s output into individual arguments.
  * Safe with a plain comma split here because none of this project's public
- * RPCs take a composite, array, or anything else whose textual form could
- * itself contain a comma — every argument is `name type[ DEFAULT ...]`.
+ * RPCs take a composite or anything else whose textual form could itself
+ * contain a comma — every argument is `name type[ DEFAULT ...]`. An array
+ * type (`uuid[]`) is fine: the `[]` suffix has no comma in it either, it's
+ * just stripped back off below before mapping to a TS type.
  */
 function parseArgs(argsText) {
   if (!argsText.trim()) return [];
@@ -299,10 +301,18 @@ const { rows: functionRows } = await client.query(`
 const functionBlocks = functionRows.map(({ name, args, ret }) => {
   const parsedArgs = parseArgs(args);
   const argsBlock = parsedArgs
-    .map(
-      (a) =>
-        `${a.name}${a.optional ? "?" : ""}: ${tsType(a.type, false)}${a.optional ? " | null" : ""}`,
-    )
+    .map((a) => {
+      // pg_get_function_arguments() renders an array parameter as `uuid[]`,
+      // `text[]` etc — a suffix tsType() doesn't strip on its own (its
+      // isArray flag is meant to be computed by the caller, same as
+      // columnsOf() already does for table columns). Without stripping it
+      // here, an array arg silently mapped to "string" — every value
+      // rejected at the type level, first hit by create_account_profile's
+      // p_bank_account_ids (this project's first RPC to take an array).
+      const isArrayType = a.type.endsWith("[]");
+      const baseType = isArrayType ? a.type.slice(0, -2) : a.type;
+      return `${a.name}${a.optional ? "?" : ""}: ${tsType(baseType, isArrayType)}${a.optional ? " | null" : ""}`;
+    })
     .join("; ");
   return `    ${name}: {
       Args: { ${argsBlock} };
