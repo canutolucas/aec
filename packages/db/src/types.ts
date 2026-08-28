@@ -88,6 +88,26 @@ export interface AccountBalance {
   unreconciled_count: number;
 }
 
+/**
+ * Row from the v_monthly_category_summary view — same reason as
+ * AccountBalance above (Postgres marks every view column nullable). Here
+ * `category_id`/`category_name` genuinely can be null (a LEFT JOIN, for a
+ * transaction lançada sem categoria); the rest never is, since it comes
+ * straight from `transactions` columns that are themselves NOT NULL, or
+ * from an aggregate over a non-empty group.
+ */
+export interface CategorySummary {
+  company_id: string;
+  period_cash: string;
+  period_accrual: string;
+  category_id: string | null;
+  category_name: string | null;
+  direction: TransactionDirection;
+  status: TransactionStatus;
+  total_amount: string;
+  entry_count: number;
+}
+
 /** Row from the v_invoice_balances view. See the file header for why this stays hand-written. */
 export interface InvoiceBalance {
   invoice_id: string;

@@ -27,6 +27,7 @@ export const routes = {
   registries: (companyId: string) => `/${companyId}/cadastros` as Route,
   team: (companyId: string) => `/${companyId}/equipe` as Route,
   reports: (companyId: string) => `/${companyId}/relatorios` as Route,
+  categoryReport: (companyId: string) => `/${companyId}/relatorio-categorias` as Route,
   reconciliation: (companyId: string) => `/${companyId}/conciliacao` as Route,
   rules: (companyId: string) => `/${companyId}/regras` as Route,
   invoices: (companyId: string) => `/${companyId}/faturamento` as Route,

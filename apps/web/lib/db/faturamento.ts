@@ -422,3 +422,52 @@ export async function autoApplyReceivables(input: {
   revalidatePath(`/${input.companyId}/painel`);
   return { ok: true, settled, suggested, failed };
 }
+
+/**
+ * Cancela uma nota importada por engano — pedido real: o XML errado foi
+ * arrastado, ou a nota nao deveria ter entrado no sistema. So permite
+ * quando nada foi recebido contra ela ainda (received_amount = 0): uma
+ * nota com baixa registrada tem dinheiro de verdade associado, e cancelar
+ * silenciosamente apagaria esse rastro em vez de exigir desfazer a baixa
+ * primeiro (o mesmo raciocinio que undo_transaction_from_line ja aplica
+ * pro lado do lancamento).
+ */
+export async function cancelarNota(companyId: string, invoiceId: string): Promise<ActionResult> {
+  const session = await requireCompany(companyId);
+  if (!canManageFaturamento(session.role)) {
+    return { ok: false, error: "Seu perfil nao pode cancelar notas fiscais." };
+  }
+
+  const supabase = await createServerSupabase();
+
+  const { data: balance, error: balanceError } = await supabase
+    .from("v_invoice_balances")
+    .select("received_amount, status")
+    .eq("company_id", companyId)
+    .eq("invoice_id", invoiceId)
+    .maybeSingle();
+  if (balanceError) return { ok: false, error: balanceError.message };
+  if (!balance) return { ok: false, error: "Nota nao encontrada." };
+  if (balance.status === "cancelada") return { ok: false, error: "Esta nota ja esta cancelada." };
+  if (fromDb(balance.received_amount) > 0) {
+    return {
+      ok: false,
+      error:
+        "Esta nota ja tem recebimento registrado — desfaca a baixa em Recebimentos antes de cancelar.",
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("invoices")
+    .update({ status: "cancelada" })
+    .eq("id", invoiceId)
+    .eq("company_id", companyId)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  // RLS nega em silencio: zero linhas afetadas, sem erro -- mesmo caso ja
+  // documentado em editarConta (accounts.ts).
+  if (data.length === 0) return { ok: false, error: "Nao foi possivel cancelar a nota." };
+
+  revalidatePath(`/${companyId}/faturamento`);
+  return OK;
+}

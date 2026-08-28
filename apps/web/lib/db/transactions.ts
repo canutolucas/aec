@@ -60,6 +60,7 @@ interface LancamentoInput {
   description: string;
   categoryId?: string | null;
   counterpartyId?: string | null;
+  costCenterId?: string | null;
   documentNumber?: string | null;
   paymentMethod?: PaymentMethod | null;
   notes?: string | null;
@@ -91,6 +92,7 @@ export async function criarLancamento(input: LancamentoInput): Promise<ActionRes
     description: input.description.trim(),
     category_id: input.categoryId || null,
     counterparty_id: input.counterpartyId || null,
+    cost_center_id: input.costCenterId || null,
     document_number: input.documentNumber?.trim() || null,
     payment_method: input.paymentMethod || null,
     notes: input.notes?.trim() || null,

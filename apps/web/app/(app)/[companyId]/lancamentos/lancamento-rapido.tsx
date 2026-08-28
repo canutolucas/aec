@@ -9,7 +9,7 @@
  * varios do mesmo dia em sequencia), e Enter grava sem tirar a mao do teclado.
  */
 
-import type { BankAccount, Category } from "@aec/db";
+import type { BankAccount, Category, CostCenter, Counterparty } from "@aec/db";
 import { useRef, useState, useTransition } from "react";
 
 import { criarLancamento } from "@/lib/db/transactions";
@@ -19,11 +19,15 @@ export function LancamentoRapido({
   companyId,
   contas,
   categorias,
+  contrapartes,
+  centrosDeCusto,
   hoje,
 }: {
   companyId: string;
   contas: readonly BankAccount[];
   categorias: readonly Category[];
+  contrapartes: readonly Counterparty[];
+  centrosDeCusto: readonly CostCenter[];
   hoje: string;
 }) {
   const [erro, setErro] = useState<string | null>(null);
@@ -54,6 +58,8 @@ export function LancamentoRapido({
         status,
         description: String(formData.get("descricao") ?? ""),
         categoryId: String(formData.get("categoria") ?? "") || null,
+        counterpartyId: String(formData.get("contraparte") ?? "") || null,
+        costCenterId: String(formData.get("centroDeCusto") ?? "") || null,
         documentNumber: String(formData.get("documento") ?? "") || null,
       });
 
@@ -167,6 +173,35 @@ export function LancamentoRapido({
           </Button>
         </div>
       </div>
+
+      {(contrapartes.length > 0 || centrosDeCusto.length > 0) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {contrapartes.length > 0 && (
+            <Field label="Cliente ou fornecedor (opcional)">
+              <Select name="contraparte" defaultValue="">
+                <option value="">Nao informado</option>
+                {contrapartes.map((contraparte) => (
+                  <option key={contraparte.id} value={contraparte.id}>
+                    {contraparte.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          {centrosDeCusto.length > 0 && (
+            <Field label="Centro de custo (opcional)">
+              <Select name="centroDeCusto" defaultValue="">
+                <option value="">Nao informado</option>
+                {centrosDeCusto.map((centro) => (
+                  <option key={centro.id} value={centro.id}>
+                    {centro.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+        </div>
+      )}
 
       <p className="text-muted-foreground text-xs">
         Data, conta e sentido permanecem depois de gravar, para lancar varios seguidos. O valor

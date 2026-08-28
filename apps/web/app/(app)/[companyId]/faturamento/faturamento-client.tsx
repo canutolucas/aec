@@ -15,6 +15,7 @@ import {
   Badge,
   Card,
   CardHeader,
+  ConfirmDialog,
   Dropzone,
   EmptyState,
   Money,
@@ -25,7 +26,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { importarNotas } from "@/lib/db/faturamento";
+import { cancelarNota, importarNotas } from "@/lib/db/faturamento";
 import { formatDate, formatTaxId, friendlyError, isInvoiceOverdue } from "@/lib/ui/format";
 
 const STATUS_TONE: Record<InvoiceBalance["status"], "neutral" | "warn" | "success"> = {
@@ -60,6 +61,19 @@ export function FaturamentoClient({
     tone: "success" | "warn" | "error";
   } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [cancelandoId, setCancelandoId] = useState<string | null>(null);
+
+  function cancelar(invoiceId: string) {
+    startTransition(async () => {
+      const result = await cancelarNota(companyId, invoiceId);
+      setFeedback(
+        result.ok
+          ? { text: "Nota cancelada.", tone: "success" }
+          : { text: result.error ?? "Nao foi possivel cancelar a nota.", tone: "error" },
+      );
+      if (result.ok) router.refresh();
+    });
+  }
 
   function handleFiles(files: readonly File[]) {
     setFeedback(null);
@@ -183,6 +197,7 @@ export function FaturamentoClient({
                   <th className="px-4 py-2 text-right font-medium">Valor</th>
                   <th className="px-4 py-2 text-right font-medium">Em aberto</th>
                   <th className="px-4 py-2 font-medium">Situacao</th>
+                  {podeImportar && <th className="px-4 py-2 font-medium" />}
                 </tr>
               </thead>
               <tbody className="divide-border divide-y">
@@ -222,12 +237,38 @@ export function FaturamentoClient({
                         ) && <Badge tone="error">Vencida</Badge>}
                       </div>
                     </td>
+                    {podeImportar && (
+                      <td className="px-4 py-2 text-right">
+                        {invoice.status !== "cancelada" &&
+                          fromDb(invoice.received_amount) === 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setCancelandoId(invoice.invoice_id)}
+                              className="text-muted-foreground hover:text-destructive text-xs underline-offset-2 hover:underline"
+                            >
+                              Cancelar
+                            </button>
+                          )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+
+        <ConfirmDialog
+          open={cancelandoId !== null}
+          onOpenChange={(open) => !open && setCancelandoId(null)}
+          title="Cancelar esta nota?"
+          description="A nota sai da lista de abertas e não entra mais nos totais de faturamento. Isso não pode ser desfeito — use só quando a nota não deveria ter sido importada."
+          confirmLabel="Cancelar nota"
+          tone="danger"
+          onConfirm={() => {
+            if (cancelandoId) cancelar(cancelandoId);
+          }}
+        />
       </Card>
     </div>
   );

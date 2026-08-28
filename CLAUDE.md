@@ -395,9 +395,8 @@ segunda fronteira de empresa).
   em `packages/ui` para isso — o Radix já era dependência desde a Fase 1a,
   faltava o wrapper.
 - **Gestão dos perfis**: card novo em `/contas` (criar, editar contas,
-  renomear, arquivar — soft delete como categorias/contrapartes). Fica
-  junto de Contas por ora; muda pra "Ajustes" quando a Fase 2b criar essa
-  tela.
+  renomear, arquivar — soft delete como categorias/contrapartes). Desde a
+  Fase 2b, `/contas` já é uma sub-aba do grupo Ajustes — não precisou mover.
 - **Filtro aplicado** em `/lancamentos`, `/conciliacao`, `/relatorios` e
   `/painel`: quando há perfil selecionado e nenhum filtro de conta única
   mais específico já escolhido na própria tela, só entram
@@ -407,14 +406,105 @@ segunda fronteira de empresa).
   (mostra o estado do ciclo mensal da empresa inteira, não uma métrica
   quebrada por conta) — candidato a revisitar se a usuária pedir.
 
-**Pendente do plano geral** (próximas levas — ver "Pendências reais"): Fase
-2b (unificar `simpleMode` numa interface só e a navegação), Fase 3
-(vocabulário/microcopy — "pareamento" → "correspondência", etc.), Fase 4
-(assistente de primeiro uso + seed de categorias em `create_company`), Fase
-5 (relatório por categoria, centro de custo/contraparte, transferência
-entre contas, cancelar nota importada por engano, paginação). O plano
-completo com todo o levantamento vive só na conversa — não há arquivo de
-plano versionado no repo.
+**Fase 2b — unificar os modos e a navegação, completa.** Antes, `simpleMode`
+produzia duas interfaces (`NAV`/`simpleNav()` em `layout.tsx`) e
+`requireAdvancedAccess()` expulsava quem estava em modo simples de 7 das 11
+telas — a persona real (a sogra do dono do projeto) não tinha como abrir
+Contas, Cadastros ou Regras sem pedir pra alguém desligar o modo simples
+nela primeiro.
+
+- **`apps/web/lib/ui/nav-groups.ts`** (novo): uma navegação só. 9-11 itens
+  viram 5 grupos — Hoje sozinho, e Movimentos/Notas/Relatórios/Ajustes cada
+  um com sub-abas (`NAV_GROUPS`). `simpleMode` deixa de ser portão de tela e
+  vira só densidade: dentro de Ajustes, esconde a sub-aba Cadastros
+  (categorias/contrapartes/centros de custo — "engenharia" da contabilidade,
+  não o dia a dia). Contas e Regras continuam sempre visíveis; Equipe
+  continua só para `owner` — é a única tela que desliga o modo simples,
+  então precisa continuar alcançável por quem está nele.
+- **`requireAdvancedAccess()`** (`apps/web/lib/db/session.ts`) virou um
+  alias puro de `requireCompany()` — mantido pelo nome/documentação nos
+  call sites, não barra mais nada por `simpleMode`.
+- **`SubNav`** (`apps/web/app/(app)/[companyId]/sub-nav.tsx`, novo): a casca
+  de abas em si, inserida em 11 `page.tsx` — nenhuma tela teve lógica
+  alterada, só ganhou a barra de navegação por cima.
+- **`MobileTabBar`** reescrita: 5 abas fixas (Hoje/Movimentos/Notas/
+  Relatórios/Ajustes) via `topLevelNav()`, sempre visível agora (antes só
+  aparecia fora do modo simples) — a folha "Mais" foi removida, não faz mais
+  falta com só 5 itens de topo.
+- 28 testes novos (`nav-groups.test.ts`) cobrindo a matriz papel×simpleMode
+  de visibilidade por grupo.
+
+**Fase 3 — vocabulário e microcopy, completa.** Preservado o vocabulário
+contábil real ("conciliação", "lançamento", "previsto/realizado", "centro de
+custo" — termos legítimos de 30 anos de profissão); trocado o jargão de
+software: "pareamento" → "correspondência" em toda a UI (`inicio-client.tsx`,
+`conciliacao-client.tsx`, `revisar-client.tsx`, `hoje/page.tsx`), "Aplicar
+automaticamente" → "Organizar o que dá sozinho", "memo" → "histórico do
+banco", "Contrapartes" → "Clientes e fornecedores", acentuação corrigida em
+menus/títulos que estavam inconsistentes desde a primeira leva (inclusive
+`ROLE_LABELS.owner`: "Responsavel" → "Responsável"). `/equipe` ganhou
+`ROLE_DESCRICOES` explicando o que cada papel pode fazer (antes escolhia-se
+no escuro); `/faturamento` ganhou um `Tooltip` explicando de onde vêm os "45
+dias" de nota vencida. **Deliberadamente não tocado**: mensagens de
+`raise exception` no SQL — são um estilo uniforme desde a primeira migration,
+e corrigir cosmética ali custaria várias migrations novas só por acentuação.
+
+**Fase 4 — primeiro uso, completa.**
+
+- **Migration** `20250101002000_seed_categories_on_create_company.sql`
+  redefine `create_company` (via `create or replace function`, a migration
+  original nunca é editada) semeando 9 categorias — 2 de entrada (Vendas e
+  serviços, Outras receitas), 7 de saída (Fornecedores, Salários e encargos,
+  Impostos e taxas, Aluguel, Despesas administrativas, Tarifas bancárias,
+  Outras despesas). Antes, empresa nova nascia sem nenhuma categoria: em
+  modo simples o `Select` ficava vazio, o botão "Lancar" ficava
+  permanentemente desabilitado, e nada na tela explicava por quê —
+  beco sem saída, porque `/cadastros` (onde daria pra criar uma categoria)
+  era inalcançável em modo simples antes da Fase 2b. **Esta migration ainda
+  não foi aplicada em produção** — SQL completo abaixo.
+- Assistente de primeira vez dedicado foi descartado: a esteira de `/hoje`
+  (Fase 1b) já cumpre esse papel de orientar "o que fazer agora".
+- Dois becos sem saída fechados: `EmptyState` de "nenhuma conta" em
+  `/conciliacao` ganhou botão pra `/contas`; `EmptyState` de "nenhuma regra"
+  em `/regras`/`/cadastros` ganhou botão pra `/conciliacao` — achados numa
+  auditoria completa dos ~13 `EmptyState` do app.
+
+**Fase 5 — promessas quebradas, completa.**
+
+- **Cancelar nota fiscal importada por engano**: `cancelarNota`
+  (`apps/web/lib/db/faturamento.ts`) — só permite quando
+  `v_invoice_balances.received_amount` é zero (uma nota com baixa registrada
+  precisa desfazer a baixa primeiro, mesmo raciocínio de
+  `undo_transaction_from_line`). Botão "Cancelar" por linha em
+  `/faturamento`, atrás de um `ConfirmDialog`.
+- **Centro de custo / contraparte no lançamento rápido**:
+  `criarLancamento` já aceitava `counterpartyId`, mas nenhuma tela
+  preenchia; ganhou `costCenterId` também. `LancamentoRapido` ganhou os dois
+  `Select` (só aparecem se a empresa tiver cadastro correspondente).
+- **Transferência entre contas**: `criarTransferencia` já existia em
+  `lib/db/transactions.ts` e nenhuma tela chamava — a badge "transferencia"
+  aparecia na tabela sem que fosse possível produzi-la. `TransferenciaDialog`
+  (novo) em `/lancamentos`.
+- **Relatório por categoria** (`/relatorio-categorias`, novo, nova aba em
+  Relatórios): consulta `v_monthly_category_summary` — a view já existia com
+  `grant`, nunca tinha sido consultada por nenhuma tela. Só `realizado`
+  (mesmo recorte que `/painel` usa pros totais do mês); agrupa em Entradas/
+  Saídas com "Sem categoria" como um grupo à parte (LEFT JOIN da view).
+  **Não filtra por perfil de conta** — decisão deliberada: a view agrega por
+  categoria, não por conta, não tem `bank_account_id` pra filtrar sem mudar
+  a view.
+- **Limites silenciosos de `/conciliacao` tornados visíveis**: as consultas
+  sempre tiveram um teto (500 linhas de extrato pendentes, 2.000
+  lançamentos não conciliados) que nunca era comunicado — um `Alert`
+  aparece quando o teto é atingido, avisando que os itens mais antigos podem
+  não estar na lista. **Não é paginação de verdade** (mudaria a tela
+  inteira, que hoje trabalha com o array completo em memória para
+  pareamento/correspondência e prova de saldo) — é o mínimo que fecha a
+  promessa quebrada: avisar, não esconder.
+
+O plano completo de todas as 5 fases (levantamento, decisões, tabela de
+vocabulário) vive só na conversa — não há arquivo de plano versionado no
+repo.
 
 ### Revisão noturna de bugs (madrugada de 28/08/2026, sem supervisão)
 
@@ -490,18 +580,12 @@ Todas as fases planejadas foram concluídas ou encerradas por decisão.
 Concluídas: Fases A–E (esqueleto do monorepo, domínio puro, design system,
 app web, conciliação), Fluxo Simples (5 fases: schema/session, domínio
 auto-apply, rota `/inicio`, navegação, controle do owner), Faturamento (5
-fases: schema, parser NFS-e, domínio receivables, Server Actions, telas) e a
-validação do parser contra XML real.
+fases: schema, parser NFS-e, domínio receivables, Server Actions, telas), a
+validação do parser contra XML real, e a Reforma de UI/UX "A Esteira"
+completa (Fases 1a–1e, 2a, 2b, 3, 4, 5 — ver seção acima).
 
 ## Pendências reais
 
-- **Reforma de UI/UX — Fases 2b a 5**: Fase 1 (fluxo do dia a dia) e Fase 2a
-  (perfis de contas) estão completas, ver seção acima. Falta: Fase 2b
-  (unificar `simpleMode` numa interface só e a navegação), Fase 3
-  (vocabulário/microcopy), Fase 4 (assistente de primeiro uso + seed de
-  categorias em `create_company`), Fase 5 (relatório por categoria, centro
-  de custo/contraparte, transferência entre contas, cancelar nota importada
-  por engano, paginação).
 - **`DataTable`/`PageHeader`/`StatTile`** (`packages/ui`, Fase 1a) existem e
   são exportados, mas nenhuma tela de `apps/web` os usa ainda — achado pela
   revisão noturna de 28/08, ver seção acima. A duplicação de `<table>`/
@@ -524,14 +608,17 @@ validação do parser contra XML real.
   `audit_log` existe no banco mas não tem NENHUMA tela que a exponha, nem pra
   quem já tem papel `contador`+ que a RLS permite ler; várias tabelas
   (`matching_rules`, `statement_lines`, `statement_imports`, `categories`,
-  `counterparties`, `cost_centers`) não têm trigger de auditoria; não existe
-  ação de UI pra cancelar uma nota fiscal já importada por engano (RLS
-  permite, mas nenhum botão chama).
+  `counterparties`, `cost_centers`) não têm trigger de auditoria. (Cancelar
+  nota fiscal importada por engano saiu desta lista — feito na Fase 5, ver
+  seção acima.)
 - Toda migration nova precisa ser colada manualmente pelo usuário no SQL
   Editor do Supabase em produção — este sandbox não tem acesso ao banco real.
-  A migration mais recente (`20250101001800_account_profiles.sql`) **ainda
-  não foi aplicada** — ver o corpo da mensagem que a introduziu para o SQL
-  completo.
+  **Duas migrations ainda não foram aplicadas**:
+  `20250101001800_account_profiles.sql` (Fase 2a, perfis de contas) e
+  `20250101002000_seed_categories_on_create_company.sql` (Fase 4, seed de
+  categorias em `create_company`) — ver o corpo das mensagens que as
+  introduziram para o SQL completo de cada uma; a da Fase 4 vai de novo,
+  completa, na mensagem que fecha esta leva.
 - O parser de NFS-e foi validado contra UM município real (Salvador/BA,
   ABRASF v1). Um XML de outra prefeitura pode expor variações de layout ainda
   não cobertas pelos sinônimos de tag em `nfse.ts`.

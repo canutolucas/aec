@@ -126,6 +126,16 @@ export default async function ReconciliationPage({
 
   const canEdit = hasRole(session.role, "assistente");
 
+  // As duas consultas grandes tem um teto (limit acima) que sempre existiu,
+  // mas nunca foi comunicado — quem tivesse mais de 500 linhas pendentes ou
+  // 2.000 lancamentos nao conciliados via a tela "completa" sem saber que
+  // faltava parte do fundo da lista. Nao e paginacao de verdade (mudaria a
+  // tela inteira, que hoje trabalha com o array completo em memoria para
+  // pareamento e prova de saldo) — e o minimo que fecha a promessa quebrada:
+  // avisar quando o teto foi atingido, com o que fazer a respeito.
+  const linhasNoTeto = (linesResult.data?.length ?? 0) >= 500;
+  const lancamentosNoTeto = (transactionsResult.data?.length ?? 0) >= 2_000;
+
   // O perfil selecionado no cabecalho filtra tudo nesta tela — nao ha um
   // filtro de conta unica proprio aqui como em /lancamentos e /relatorios,
   // entao a lente e a unica forma de estreitar o que aparece.
@@ -196,6 +206,17 @@ export default async function ReconciliationPage({
         <Alert tone="info">
           Seu perfil permite consultar a conciliação, mas apenas assistentes, contadores e
           responsáveis podem importar ou confirmar movimentos.
+        </Alert>
+      )}
+
+      {(linhasNoTeto || lancamentosNoTeto) && (
+        <Alert tone="warn" title="Esta tela não está mostrando tudo">
+          {linhasNoTeto &&
+            "Há mais de 500 movimentos do extrato aguardando revisão — os mais antigos podem não aparecer abaixo. "}
+          {lancamentosNoTeto &&
+            "Há mais de 2.000 lançamentos sem conciliar — os mais antigos podem não aparecer abaixo. "}
+          Revise e confirme o que já apareceu para reduzir o total, ou use &ldquo;Organizar o que dá
+          sozinho&rdquo; para adiantar o que o sistema já reconhece.
         </Alert>
       )}
 

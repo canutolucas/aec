@@ -68,6 +68,7 @@ export const NAV_GROUPS = {
     items: [
       { key: "painel", label: "Painel", href: routes.dashboard },
       { key: "fluxo", label: "Fluxo de caixa", href: routes.reports },
+      { key: "categorias", label: "Por categoria", href: routes.categoryReport },
     ],
   },
   ajustes: {

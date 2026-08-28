@@ -3,6 +3,8 @@ import {
   type Category,
   hasRole,
   listAccountProfiles,
+  listCostCenters,
+  listCounterparties,
   type MonthlyClosing,
   type Transaction,
 } from "@aec/db";
@@ -20,6 +22,7 @@ import { FechamentoMes } from "./fechamento-mes";
 import { FiltroMes } from "./filtro-mes";
 import { LancamentoRapido } from "./lancamento-rapido";
 import { type LancamentoRow, LancamentosTable } from "./lancamentos-table";
+import { TransferenciaDialog } from "./transferencia-dialog";
 
 export const metadata = { title: "Lancamentos — Controle Bancario" };
 
@@ -42,36 +45,45 @@ export default async function LancamentosPage({
 
   const supabase = await createServerSupabase();
 
-  const [contasResult, categoriasResult, lancamentosResult, fechamentoResult, perfis] =
-    await Promise.all([
-      supabase
-        .from("bank_accounts")
-        .select("*")
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-        .order("name"),
-      supabase
-        .from("categories")
-        .select("*")
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-        .order("name"),
-      supabase
-        .from("transactions")
-        .select("*")
-        .eq("company_id", companyId)
-        .gte("booking_date", primeiroDia)
-        .lte("booking_date", ultimoDia)
-        .order("booking_date", { ascending: false })
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("monthly_closings")
-        .select("*")
-        .eq("company_id", companyId)
-        .eq("period", primeiroDia)
-        .maybeSingle(),
-      listAccountProfiles(supabase, companyId),
-    ]);
+  const [
+    contasResult,
+    categoriasResult,
+    lancamentosResult,
+    fechamentoResult,
+    perfis,
+    contrapartes,
+    centrosDeCusto,
+  ] = await Promise.all([
+    supabase
+      .from("bank_accounts")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("categories")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("transactions")
+      .select("*")
+      .eq("company_id", companyId)
+      .gte("booking_date", primeiroDia)
+      .lte("booking_date", ultimoDia)
+      .order("booking_date", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("monthly_closings")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("period", primeiroDia)
+      .maybeSingle(),
+    listAccountProfiles(supabase, companyId),
+    listCounterparties(supabase, companyId),
+    listCostCenters(supabase, companyId),
+  ]);
 
   for (const result of [contasResult, categoriasResult, lancamentosResult]) {
     if (result.error) throw result.error;
@@ -149,11 +161,22 @@ export default async function LancamentosPage({
 
       {podeLancar && !mesFechado && (
         <Card>
-          <CardHeader title="Lancar" />
+          <CardHeader
+            title="Lancar"
+            action={
+              <TransferenciaDialog
+                companyId={companyId}
+                contas={contas}
+                hoje={hoje >= primeiroDia && hoje <= ultimoDia ? hoje : primeiroDia}
+              />
+            }
+          />
           <LancamentoRapido
             companyId={companyId}
             contas={contas}
             categorias={categorias}
+            contrapartes={contrapartes}
+            centrosDeCusto={centrosDeCusto}
             hoje={hoje >= primeiroDia && hoje <= ultimoDia ? hoje : primeiroDia}
           />
         </Card>
