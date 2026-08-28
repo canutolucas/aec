@@ -8,15 +8,18 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { useState } from "react";
 
-import { Badge, Money } from "@/lib/ui/components";
+import { Badge, Money, Tooltip, TooltipContent, TooltipTrigger } from "@/lib/ui/components";
 import { formatDate } from "@/lib/ui/format";
 
 import { AcoesLancamento } from "./acoes-lancamento";
+import { DetalheLancamento } from "./detalhe-lancamento";
 
 export interface LancamentoRow extends Transaction {
   readonly contaNome: string;
   readonly categoriaNome: string | null;
+  readonly memoExtrato: string | null;
 }
 
 const columnHelper = createColumnHelper<LancamentoRow>();
@@ -35,6 +38,8 @@ export function LancamentosTable({
   lancamentos: readonly LancamentoRow[];
   podeEditar: boolean;
 }) {
+  const [lancamentoAbertoId, setLancamentoAbertoId] = useState<string | null>(null);
+
   const columns = [
     columnHelper.accessor("booking_date", {
       header: "Data",
@@ -74,7 +79,26 @@ export function LancamentosTable({
     }),
     columnHelper.accessor("amount", {
       header: "Valor",
-      cell: (info) => <Money cents={fromDb(info.getValue())} />,
+      cell: (info) => {
+        const lancamento = info.row.original;
+        const valor = <Money cents={fromDb(info.getValue())} />;
+        return (
+          <button
+            type="button"
+            onClick={() => setLancamentoAbertoId(lancamento.id)}
+            className="focus-visible:ring-ring/30 rounded outline-none focus-visible:ring-2"
+          >
+            {lancamento.memoExtrato ? (
+              <Tooltip>
+                <TooltipTrigger asChild>{valor}</TooltipTrigger>
+                <TooltipContent>{lancamento.memoExtrato}</TooltipContent>
+              </Tooltip>
+            ) : (
+              valor
+            )}
+          </button>
+        );
+      },
       meta: { align: "right" as const },
     }),
     columnHelper.display({
@@ -108,41 +132,58 @@ export function LancamentosTable({
     getRowId: (row) => row.id,
   });
 
+  const lancamentoAberto = lancamentos.find((item) => item.id === lancamentoAbertoId) ?? null;
+
   return (
-    <table className="w-full text-sm">
-      <thead>
-        {table.getHeaderGroups().map((headerGroup) => (
-          <tr
-            key={headerGroup.id}
-            className="border-border text-muted-foreground border-b text-left text-xs"
-          >
-            {headerGroup.headers.map((header) => (
-              <th
-                key={header.id}
-                className={`px-4 py-2 font-medium ${header.column.columnDef.meta?.align === "right" ? "text-right" : ""}`}
-              >
-                {header.isPlaceholder
-                  ? null
-                  : flexRender(header.column.columnDef.header, header.getContext())}
-              </th>
-            ))}
-          </tr>
-        ))}
-      </thead>
-      <tbody className="divide-border divide-y">
-        {table.getRowModel().rows.map((row) => (
-          <tr key={row.id}>
-            {row.getVisibleCells().map((cell) => (
-              <td
-                key={cell.id}
-                className={`px-4 py-2 ${cell.column.columnDef.meta?.align === "right" ? "text-right" : ""}`}
-              >
-                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      <table className="w-full text-sm">
+        <thead>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <tr
+              key={headerGroup.id}
+              className="border-border text-muted-foreground border-b text-left text-xs"
+            >
+              {headerGroup.headers.map((header) => (
+                <th
+                  key={header.id}
+                  className={`px-4 py-2 font-medium ${header.column.columnDef.meta?.align === "right" ? "text-right" : ""}`}
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                </th>
+              ))}
+            </tr>
+          ))}
+        </thead>
+        <tbody className="divide-border divide-y">
+          {table.getRowModel().rows.map((row) => (
+            <tr key={row.id}>
+              {row.getVisibleCells().map((cell) => (
+                <td
+                  key={cell.id}
+                  className={`px-4 py-2 ${cell.column.columnDef.meta?.align === "right" ? "text-right" : ""}`}
+                >
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <DetalheLancamento
+        // Remonta a cada lancamento diferente — o painel guarda estado local
+        // (observacao em edicao) que nao pode vazar de um item pro outro.
+        key={lancamentoAbertoId ?? "fechado"}
+        companyId={companyId}
+        lancamento={lancamentoAberto}
+        podeEditar={podeEditar}
+        open={lancamentoAbertoId !== null}
+        onOpenChange={(open) => {
+          if (!open) setLancamentoAbertoId(null);
+        }}
+      />
+    </>
   );
 }

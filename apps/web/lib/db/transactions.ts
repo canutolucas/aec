@@ -192,3 +192,28 @@ export async function darBaixa(
   revalidatePath(`/${companyId}/painel`);
   return OK;
 }
+
+/**
+ * Atualiza a observacao livre do lancamento — o campo que existia desde a
+ * primeira leva (`transactions.notes`) mas nenhuma tela jamais expunha.
+ * Pedido direto da usuaria final: um lugar pra anotar "do que se refere"
+ * aquele valor, pra nao depender so do historico que o banco mandou.
+ */
+export async function atualizarObservacoes(
+  companyId: string,
+  transactionId: string,
+  notes: string,
+): Promise<ActionResult> {
+  const supabase = await createServerSupabase();
+
+  const { error } = await supabase
+    .from("transactions")
+    .update({ notes: notes.trim() || null })
+    .eq("id", transactionId)
+    .eq("company_id", companyId);
+
+  if (error) return { ok: false, error: traduzErro(error) };
+
+  revalidatePath(`/${companyId}/lancamentos`);
+  return OK;
+}

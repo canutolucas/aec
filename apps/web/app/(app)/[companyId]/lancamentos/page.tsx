@@ -82,6 +82,26 @@ export default async function LancamentosPage({
     ? todos.filter((lancamento) => lancamento.bank_account_id === filtros.conta)
     : todos;
 
+  // Historico original do banco (statement_lines.memo), ligado por
+  // matched_transaction_id — pedido direto da usuaria final: "nao consigo
+  // lembrar do que se refere aquele valor". O dado ja existia no banco,
+  // nenhuma tela ate esta leva mostrava. Uma consulta so, em lote, pra nao
+  // disparar uma por linha da tabela.
+  const idsLancamentos = lancamentos.map((l) => l.id);
+  const linhasResult =
+    idsLancamentos.length > 0
+      ? await supabase
+          .from("statement_lines")
+          .select("memo, matched_transaction_id")
+          .eq("company_id", companyId)
+          .in("matched_transaction_id", idsLancamentos)
+      : { data: [], error: null };
+  const memoPorLancamento = new Map(
+    (linhasResult.data ?? []).flatMap((linha) =>
+      linha.matched_transaction_id ? [[linha.matched_transaction_id, linha.memo] as const] : [],
+    ),
+  );
+
   const nomePorConta = new Map(contas.map((conta) => [conta.id, conta.name]));
   const nomePorCategoria = new Map(categorias.map((categoria) => [categoria.id, categoria.name]));
 
@@ -164,6 +184,7 @@ export default async function LancamentosPage({
                 categoriaNome: lancamento.category_id
                   ? (nomePorCategoria.get(lancamento.category_id) ?? "—")
                   : null,
+                memoExtrato: memoPorLancamento.get(lancamento.id) ?? null,
               }))}
             />
           </div>
