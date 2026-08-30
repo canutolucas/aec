@@ -648,10 +648,10 @@ completa (Fases 1a–1e, 2a, 2b, 3, 4, 5 — ver seção acima).
   leva decide se continua nessa linha ou avança pra (3).
 - Toda migration nova precisa ser colada manualmente pelo usuário no SQL
   Editor do Supabase em produção — este sandbox não tem acesso ao banco real.
-  `20250101001800_account_profiles.sql` (Fase 2a) e
-  `20250101002000_seed_categories_on_create_company.sql` (Fase 4) foram
-  aplicadas em 2026-08-29. **`20250101002100_audit_triggers_restantes.sql`
-  ainda não foi aplicada** — SQL completo na mensagem que a introduziu.
+  `20250101001800_account_profiles.sql` (Fase 2a),
+  `20250101002000_seed_categories_on_create_company.sql` (Fase 4) e
+  `20250101002100_audit_triggers_restantes.sql` (trilha de auditoria) foram
+  aplicadas em 2026-08-29. Nenhuma migration pendente no momento.
 - O parser de NFS-e foi validado contra UM município real (Salvador/BA,
   ABRASF v1). Um XML de outra prefeitura pode expor variações de layout ainda
   não cobertas pelos sinônimos de tag em `nfse.ts`.
