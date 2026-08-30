@@ -561,7 +561,44 @@ Achado sinalizado mas **não corrigido de propósito** (fora do escopo de
 correção de bug): `DataTable`/`PageHeader`/`StatTile`, adicionados na Fase
 1a, ainda não são usados em nenhuma tela de `apps/web` — a duplicação de
 `<table>` que deveriam substituir continua existindo. Candidato pra Fase
-2b/3, não pra uma correção pontual.
+2b/3, não pra uma correção pontual. (`/auditoria`, nesta mesma leva, é a
+primeira tela do sistema a usar os três — as ~5 telas antigas com `<table>`
+duplicada continuam como estavam; migrá-las é trabalho separado, cosmético,
+sem urgência.)
+
+### Trilha de auditoria completa (item 2 do backlog filosófico, retomado)
+
+`app.write_audit_log()` e a tabela `audit_log` existem desde a primeira
+leva (RLS já liberava leitura a partir de `contador`), mas duas lacunas
+sobravam: seis tabelas nunca tiveam o trigger ligado, e nenhuma tela jamais
+consultava a trilha — nem quem já tinha permissão pra ler tinha onde ver.
+
+- **`20250101002100_audit_triggers_restantes.sql`**: liga
+  `app.write_audit_log()` (o mesmo trigger já em produção desde a primeira
+  leva, nada novo) em `categories`, `counterparties`, `cost_centers`,
+  `matching_rules`, `statement_imports`, `statement_lines` — a lista exata
+  que já estava documentada aqui como pendência — e também em
+  `account_profiles`/`account_profile_accounts` (Fase 2a, que nasceu depois
+  da trilha existir e ficou de fora pelo mesmo motivo). Teste novo em
+  `tests/sql/10_schema_test.sql` prova que renomear uma categoria agora
+  grava a trilha, do mesmo jeito que `transactions` já provava.
+- **`/auditoria`** (nova rota, nova aba em Relatórios, `minRole: "contador"`
+  — a mesma régua que a RLS já usa, então a aba nem aparece pra quem nunca
+  conseguiria ver nada nela): lista as alterações do mês (filtro por mês +
+  por tabela), com "Ver detalhes" abrindo o diff campo a campo entre
+  `old_data`/`new_data` (`updated_at` excluído do diff, mesmo critério que o
+  trigger já usa pra não gravar UPDATE que não mudou nada). `changed_by`
+  vira nome via uma consulta em lote em `profiles` (mesmo padrão do memo de
+  extrato em `/lancamentos`); `null` (só ocorre se `auth.uid()` era nulo no
+  momento da escrita — fora do fluxo normal do app) aparece como "Fora do
+  app". Mesmo padrão de teto visível da Fase 5: até 500 linhas por consulta,
+  com aviso se bater no teto.
+- **Limitação aceita e documentada no próprio código**: o filtro por mês
+  compara `changed_at` (timestamptz) contra a data crua, o que assume meia-
+  noite UTC em vez de meia-noite de Brasília — um registro dos primeiros ou
+  últimos instantes do mês pode aparecer no mês vizinho. Não afeta saldo nem
+  fechamento (é só uma tela de consulta), e nenhuma outra tela do sistema
+  ainda tinha filtrado por timestamptz para haver um padrão exato a seguir.
 
 ## Fases do projeto — o que falta
 
@@ -603,30 +640,33 @@ completa (Fases 1a–1e, 2a, 2b, 3, 4, 5 — ver seção acima).
   simples (`/regras`), `autoApplyReceivables` com bucket `failed`, alerta de
   caixa negativo e mês fechado consolidados (ver "Consolidação de status
   disperso" e "Checagem de papel explícita em RPCs" acima — `close_month`/
-  `reopen_month`/`settle_invoices` já saíram da lista de pendências de (2)).
-  Candidatos que sobraram de (2), pra quando chegar a vez de novo: a trilha
-  `audit_log` existe no banco mas não tem NENHUMA tela que a exponha, nem pra
-  quem já tem papel `contador`+ que a RLS permite ler; várias tabelas
-  (`matching_rules`, `statement_lines`, `statement_imports`, `categories`,
-  `counterparties`, `cost_centers`) não têm trigger de auditoria. (Cancelar
-  nota fiscal importada por engano saiu desta lista — feito na Fase 5, ver
-  seção acima.)
+  `reopen_month`/`settle_invoices` já saíram da lista de pendências de (2)),
+  cancelar nota fiscal importada por engano (Fase 5), e a trilha de
+  auditoria — trigger nas tabelas que faltavam + tela `/auditoria` pra
+  quem já tinha permissão de ler e não tinha onde ver (ver seção acima).
+  Não sobrou nenhum candidato de (2) documentado no momento; a próxima
+  leva decide se continua nessa linha ou avança pra (3).
 - Toda migration nova precisa ser colada manualmente pelo usuário no SQL
   Editor do Supabase em produção — este sandbox não tem acesso ao banco real.
   `20250101001800_account_profiles.sql` (Fase 2a) e
-  `20250101002000_seed_categories_on_create_company.sql` (Fase 4), as duas
-  únicas que estavam pendentes, foram aplicadas em 2026-08-29.
+  `20250101002000_seed_categories_on_create_company.sql` (Fase 4) foram
+  aplicadas em 2026-08-29. **`20250101002100_audit_triggers_restantes.sql`
+  ainda não foi aplicada** — SQL completo na mensagem que a introduziu.
 - O parser de NFS-e foi validado contra UM município real (Salvador/BA,
   ABRASF v1). Um XML de outra prefeitura pode expor variações de layout ainda
   não cobertas pelos sinônimos de tag em `nfse.ts`.
-- **PDF de banco além do Cora**: o escritório usa vários bancos (Bradesco,
-  Caixa, etc.), e OFX/CSV já cobrem qualquer um deles — só PDF é Cora-only
-  hoje (ver "Conciliação bancária" acima pro porquê e o que destrava um
-  leitor novo). Pendente: usuário vai tentar exportar OFX da Caixa pelo
-  internet banking (Extrato → Exportar/Download → formato OFX, às vezes
-  rotulado "Money") como caminho imediato; se algum banco só oferecer PDF
-  com texto de verdade (não imagem, como o testado nesta sessão), mandar uma
-  amostra pra construir o leitor dedicado.
+- **PDF de banco além do Cora — confirmado que vai ser necessário** (Lucas,
+  29/08): o escritório vai mandar extratos de outros bancos além do Cora,
+  em PDF, OFX e CSV. OFX/CSV **já funcionam pra qualquer banco hoje**
+  (`packages/statements/src/universal/`) — nada a construir aí, é só
+  importar quando chegar. **PDF continua Cora-only** — ver "Conciliação
+  bancária" acima pro porquê (leitor por posição de texto, só existe pro
+  layout do Cora) e o que destrava um leitor novo: uma amostra real do PDF
+  de cada banco, com texto de verdade e selecionável (não imagem escaneada
+  — confirma tentando marcar/copiar o texto num leitor comum antes de
+  mandar). Assim que uma amostra chegar, o leitor dedicado desse banco é o
+  próximo passo natural, seguindo o mesmo rigor de validação do Cora (soma
+  tudo, bate contra o saldo declarado).
 
 ## Branch
 

@@ -33,6 +33,18 @@ export function formatMonth(period: IsoDate): string {
   return `${names[Number(month) - 1]} de ${year}`;
 }
 
+/** timestamptz (ex.: "2025-03-05T14:32:00Z") -> "05/03/2025 11:32" no fuso do Brasil. */
+export function formatDateTime(timestamp: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
 /** Formata CNPJ ou CPF a partir dos digitos. */
 export function formatTaxId(digits: string | null): string {
   if (!digits) return "";

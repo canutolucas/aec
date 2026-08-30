@@ -65,6 +65,17 @@ export type InvoiceSettlement = Tables["invoice_settlements"]["Row"];
 export type AccountProfile = Tables["account_profiles"]["Row"];
 export type AccountProfileAccount = Tables["account_profile_accounts"]["Row"];
 
+/**
+ * Uma linha da trilha de auditoria (`app.write_audit_log()`, preenchida só
+ * por trigger, nunca pela aplicação). `action` é `text` com `check` no SQL,
+ * não um enum do Postgres — a introspecção não tem como saber que só três
+ * valores existem, então a união é declarada aqui como nos outros dois
+ * casos deste arquivo.
+ */
+export type AuditLog = Omit<Tables["audit_log"]["Row"], "action"> & {
+  action: "INSERT" | "UPDATE" | "DELETE";
+};
+
 export type Transaction = Omit<Tables["transactions"]["Row"], "direction" | "is_transfer"> & {
   direction: TransactionDirection;
   is_transfer: boolean;

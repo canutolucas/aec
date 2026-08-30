@@ -65,6 +65,23 @@ describe("visibleItems — Ajustes", () => {
   });
 });
 
+describe("visibleItems — Relatórios", () => {
+  it("Auditoria so aparece a partir de contador (RLS de audit_log so deixa contador+ ler)", () => {
+    expect(visibleItems(NAV_GROUPS.relatorios, "contador", false).map((i) => i.key)).toContain(
+      "auditoria",
+    );
+    expect(visibleItems(NAV_GROUPS.relatorios, "owner", false).map((i) => i.key)).toContain(
+      "auditoria",
+    );
+    expect(
+      visibleItems(NAV_GROUPS.relatorios, "assistente", false).map((i) => i.key),
+    ).not.toContain("auditoria");
+    expect(
+      visibleItems(NAV_GROUPS.relatorios, "cliente_leitura", false).map((i) => i.key),
+    ).not.toContain("auditoria");
+  });
+});
+
 describe("visibleItems — Movimentos e Notas nunca somem", () => {
   it("todo papel e todo modo veem as 3 abas de Movimentos", () => {
     for (const role of ["cliente_leitura", "assistente", "contador", "owner"] as const) {

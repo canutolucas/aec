@@ -69,6 +69,9 @@ export const NAV_GROUPS = {
       { key: "painel", label: "Painel", href: routes.dashboard },
       { key: "fluxo", label: "Fluxo de caixa", href: routes.reports },
       { key: "categorias", label: "Por categoria", href: routes.categoryReport },
+      // RLS so deixa contador+ ler audit_log (ver 20250101000700_rls.sql) — a
+      // aba fica escondida de quem nunca conseguiria ver nada nela mesmo.
+      { key: "auditoria", label: "Auditoria", href: routes.auditLog, minRole: "contador" as const },
     ],
   },
   ajustes: {

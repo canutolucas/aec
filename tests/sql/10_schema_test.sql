@@ -1225,6 +1225,35 @@ do $$ begin perform pg_temp.expect_denied(
 ); end $$;
 reset role;
 
+-- 20250101002100_audit_triggers_restantes.sql ligou o mesmo trigger em
+-- categories/counterparties/cost_centers/matching_rules/statement_imports/
+-- statement_lines/account_profiles/account_profile_accounts -- so confere
+-- uma delas (categories): o trigger e o mesmo app.write_audit_log() ja
+-- provado acima, o unico risco real era esquecer de ligar em alguma tabela.
+set role authenticated;
+do $$
+declare v_old text; v_new text;
+begin
+  perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+    $q$update public.categories set name = 'Receita de servicos (renomeada)'
+       where id = 'c1c1c1c1-0000-0000-0000-000000000001'$q$);
+
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', '11111111-1111-1111-1111-111111111111')::text, true);
+
+  select old_data ->> 'name', new_data ->> 'name' into v_old, v_new
+  from public.audit_log
+  where table_name = 'categories' and action = 'UPDATE'
+    and row_id = 'c1c1c1c1-0000-0000-0000-000000000001'
+  order by changed_at desc, id desc limit 1;
+
+  perform pg_temp.assert(v_old = 'Receita de servicos',
+    'auditoria de categories guardou o nome ANTES de renomear');
+  perform pg_temp.assert(v_new = 'Receita de servicos (renomeada)',
+    'auditoria de categories guardou o nome DEPOIS de renomear');
+end $$;
+reset role;
+
 \echo ''
 \echo '== Criacao de empresa =='
 set role authenticated;
