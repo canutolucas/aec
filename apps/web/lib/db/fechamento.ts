@@ -46,6 +46,8 @@ export async function fecharMes(input: {
 
   revalidatePath(`/${input.companyId}/lancamentos`);
   revalidatePath(`/${input.companyId}/painel`);
+  revalidatePath(`/${input.companyId}/hoje`);
+  revalidatePath(`/${input.companyId}/fechamentos`);
   return OK;
 }
 
@@ -67,5 +69,7 @@ export async function reabrirMes(input: {
 
   revalidatePath(`/${input.companyId}/lancamentos`);
   revalidatePath(`/${input.companyId}/painel`);
+  revalidatePath(`/${input.companyId}/hoje`);
+  revalidatePath(`/${input.companyId}/fechamentos`);
   return OK;
 }

@@ -34,6 +34,7 @@ export const routes = {
   auditLog: (companyId: string) => `/${companyId}/auditoria` as Route,
   reconciliation: (companyId: string) => `/${companyId}/conciliacao` as Route,
   planned: (companyId: string) => `/${companyId}/previstos` as Route,
+  closings: (companyId: string) => `/${companyId}/fechamentos` as Route,
   rules: (companyId: string) => `/${companyId}/regras` as Route,
   invoices: (companyId: string) => `/${companyId}/faturamento` as Route,
   receivables: (companyId: string) => `/${companyId}/recebimentos` as Route,

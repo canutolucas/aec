@@ -53,6 +53,7 @@ export const NAV_GROUPS = {
       { key: "lancamentos", label: "Lançamentos", href: (id: string) => routes.transactions(id) },
       { key: "previstos", label: "A pagar/receber", href: routes.planned },
       { key: "conciliacao", label: "Conciliação", href: routes.reconciliation },
+      { key: "fechamentos", label: "Fechamentos", href: routes.closings },
     ],
   },
   notas: {

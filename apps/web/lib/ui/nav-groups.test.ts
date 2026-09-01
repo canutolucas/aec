@@ -83,10 +83,10 @@ describe("visibleItems — Relatórios", () => {
 });
 
 describe("visibleItems — Movimentos e Notas nunca somem", () => {
-  it("todo papel e todo modo veem as 4 abas de Movimentos", () => {
+  it("todo papel e todo modo veem as 5 abas de Movimentos", () => {
     for (const role of ["cliente_leitura", "assistente", "contador", "owner"] as const) {
       for (const simpleMode of [false, true]) {
-        expect(visibleItems(NAV_GROUPS.movimentos, role, simpleMode)).toHaveLength(4);
+        expect(visibleItems(NAV_GROUPS.movimentos, role, simpleMode)).toHaveLength(5);
       }
     }
   });

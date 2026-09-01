@@ -1,12 +1,17 @@
-import { type BankAccount, hasRole, type MonthlyClosing } from "@aec/db";
+import { type BankAccount, hasRole } from "@aec/db";
 import {
   addDays,
+  addMonths,
+  canCloseMonth,
   fromDb,
+  isIsoDate,
   type IsoDate,
   project,
   startOfMonth,
+  statementCoverage,
   sum,
   todayInBrazil,
+  workingMonth,
 } from "@aec/domain";
 import {
   Alert,
@@ -20,17 +25,23 @@ import {
 } from "@aec/ui";
 import { CheckCircle2, FileCheck2, HandCoins, LockOpen, Upload } from "lucide-react";
 
+import { calcularProvaDeSaldo } from "@/lib/db/prova-de-saldo";
 import { requireCompany } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 import { formatDate, formatMonth, isInvoiceOverdue } from "@/lib/ui/format";
 import { routes } from "@/lib/ui/routes";
+
+import { MesDeTrabalho } from "./mes-de-trabalho";
 
 export const metadata = { title: "Hoje — Controle Bancario" };
 
 // Mesmo horizonte que /painel e /relatorios ja usavam pra projecao de caixa.
 const HORIZONTE_DIAS = 30;
 
-type ContaBasica = Pick<BankAccount, "id" | "name" | "bank_name">;
+type ContaBasica = Pick<
+  BankAccount,
+  "id" | "name" | "bank_name" | "opening_balance" | "opening_balance_date"
+>;
 
 /**
  * "Hoje" substitui /painel e /inicio como aterrissagem — antes desta leva,
@@ -40,15 +51,38 @@ type ContaBasica = Pick<BankAccount, "id" | "name" | "bank_name">;
  * A esteira (Stepper) mostra em que estagio do ciclo mensal a empresa esta;
  * o card "Proxima acao" traduz isso num UNICO botao — o "fordismo" que
  * faltava: nunca mais de uma decisao em destaque por vez.
+ *
+ * O periodo da esteira NAO e sempre o mes corrente: workingMonth()
+ * (packages/domain) decide em que mes a contadora esta de fato trabalhando
+ * — em 1o de setembro, e agosto, nao setembro. Antes desta leva a esteira
+ * sempre ancorava no mes corrente, entao no dia 2 de setembro o app ja
+ * mandava "feche setembro", um mes que mal comecou.
  */
-export default async function HojePage({ params }: { params: Promise<{ companyId: string }> }) {
+export default async function HojePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ companyId: string }>;
+  searchParams: Promise<{ mes?: string }>;
+}) {
   const { companyId } = await params;
+  const filtros = await searchParams;
   const session = await requireCompany(companyId);
   const supabase = await createServerSupabase();
 
   const hoje = todayInBrazil();
   const inicioDoMes = startOfMonth(hoje);
+  const mesAnterior = addMonths(inicioDoMes, -1);
   const fimDoHorizonte = addDays(hoje, HORIZONTE_DIAS);
+
+  // `?mes=` deixa a contadora navegar manualmente para qualquer mes — o
+  // padrao continua sendo o mes de trabalho automatico (workingMonth), mas
+  // ela nao fica presa nele.
+  const periodoManual =
+    filtros.mes && isIsoDate(filtros.mes) ? startOfMonth(filtros.mes) : undefined;
+  const periodosParaChecarFechamento = periodoManual
+    ? [periodoManual]
+    : [...new Set([mesAnterior, inicioDoMes])];
 
   const [
     accountsResult,
@@ -57,11 +91,12 @@ export default async function HojePage({ params }: { params: Promise<{ companyId
     balancesResult,
     plannedResult,
     linesResult,
-    fechamentoResult,
+    fechamentosResult,
+    coberturaImportsResult,
   ] = await Promise.all([
     supabase
       .from("bank_accounts")
-      .select("id, name, bank_name")
+      .select("id, name, bank_name, opening_balance, opening_balance_date")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("name"),
@@ -95,10 +130,18 @@ export default async function HojePage({ params }: { params: Promise<{ companyId
       .eq("status", "pendente"),
     supabase
       .from("monthly_closings")
-      .select("*")
+      .select("period, locked_at")
       .eq("company_id", companyId)
-      .eq("period", inicioDoMes)
-      .maybeSingle(),
+      .in("period", periodosParaChecarFechamento),
+    // period_end, nao created_at: cobertura de extrato prova que o extrato
+    // ALCANCA o fim do mes, nao so que alguma coisa foi importada nele —
+    // ver statementCoverage() em packages/domain.
+    supabase
+      .from("statement_imports")
+      .select("bank_account_id, period_end")
+      .eq("company_id", companyId)
+      .not("period_end", "is", null)
+      .gte("period_end", periodoManual ?? mesAnterior),
   ]);
 
   if (accountsResult.error) throw accountsResult.error;
@@ -124,9 +167,29 @@ export default async function HojePage({ params }: { params: Promise<{ companyId
   // Melhor esforco: cada consulta abaixo alimenta um aviso ou um passo da
   // esteira — uma falha isolada nao deveria derrubar a tela inteira.
   const lastImport = lastImportResult.error ? null : lastImportResult.data;
-  const lastImportEsteMs = Boolean(
-    lastImport && lastImport.created_at.slice(0, 7) === inicioDoMes.slice(0, 7),
+
+  const fechamentos = fechamentosResult.error ? [] : (fechamentosResult.data ?? []);
+  const periodosFechados = fechamentos.filter((f) => f.locked_at).map((f) => f.period as IsoDate);
+
+  // Uma conta ativa mais antiga vale de "inicio da operacao" — workingMonth
+  // nao pode devolver um mes anterior a isso, ou uma empresa nova voltaria
+  // "trabalhando" num mes em que ela nem existia.
+  const inicioMaisAntigo = accounts.reduce<IsoDate | undefined>(
+    (mais, conta) =>
+      !mais || conta.opening_balance_date < mais ? conta.opening_balance_date : mais,
+    undefined,
   );
+
+  const periodoTrabalho =
+    periodoManual ??
+    workingMonth({
+      today: hoje,
+      closedPeriods: periodosFechados,
+      earliestActivity: inicioMaisAntigo,
+    });
+
+  const mesFechado = fechamentos.some((f) => f.period === periodoTrabalho && f.locked_at);
+  const podeFechar = canCloseMonth(periodoTrabalho, hoje);
 
   const notasVencidas = invoicesResult.error
     ? 0
@@ -143,10 +206,23 @@ export default async function HojePage({ params }: { params: Promise<{ companyId
 
   const linhasPendentes = linesResult.error ? 0 : (linesResult.count ?? 0);
 
-  const fechamento = fechamentoResult.error
-    ? null
-    : (fechamentoResult.data as MonthlyClosing | null);
-  const mesFechado = Boolean(fechamento?.locked_at);
+  const cobertura = statementCoverage({
+    period: periodoTrabalho,
+    accounts: accounts.map((c) => ({ id: c.id, openingBalanceDate: c.opening_balance_date })),
+    imports: (coberturaImportsResult.error ? [] : (coberturaImportsResult.data ?? [])).map((i) => ({
+      bankAccountId: i.bank_account_id,
+      periodEnd: i.period_end,
+    })),
+  });
+  const contasSemExtrato = cobertura.missing.length;
+
+  // A mesma prova de saldo que /conciliacao ja fazia (extraida para
+  // apps/web/lib/db/prova-de-saldo.ts nesta leva): compara o saldo que o
+  // banco declarou no extrato com o que o sistema calcula. "O saldo bate?"
+  // e a pergunta central de um fechamento — antes desta leva, essa resposta
+  // so existia escondida em /conciliacao.
+  const provaDeSaldo = await calcularProvaDeSaldo(supabase, companyId, accounts);
+  const saldoDivergente = provaDeSaldo.some((check) => check.diff !== 0);
 
   const projecao =
     balancesResult.error || plannedResult.error
@@ -163,16 +239,23 @@ export default async function HojePage({ params }: { params: Promise<{ companyId
           })),
         });
 
-  // A esteira do mes: cada passo tem uma condicao propria de "feito". O
-  // primeiro passo que nao esta feito e o passo "atual" — so ele vira o
-  // card de proxima acao abaixo. Isto e o "fordismo" que faltava: uma
-  // decisao em destaque por vez, nunca um paredao de avisos.
+  // A esteira do mes de trabalho: cada passo tem uma condicao propria de
+  // "feito". O primeiro passo que nao esta feito e o passo "atual" — so ele
+  // vira o card de proxima acao abaixo. "Fechar" conta como feito tambem
+  // quando o mes ainda esta em curso (podeFechar=false): nao ha nada
+  // ACIONAVEL a fazer ali alem de esperar o mes terminar, entao ele nao
+  // deve travar a esteira num estado "atual" sem CTA nenhum.
   const passos = [
-    { key: "extrato", label: "Extrato", count: 0, feito: lastImportEsteMs },
+    { key: "extrato", label: "Extrato", count: contasSemExtrato, feito: contasSemExtrato === 0 },
     { key: "revisar", label: "Revisar", count: linhasPendentes, feito: linhasPendentes === 0 },
     { key: "notas", label: "Notas", count: notasVencidas, feito: notasVencidas === 0 },
-    { key: "conferir", label: "Conferir", count: aConciliar, feito: aConciliar === 0 },
-    { key: "fechar", label: "Fechar", count: 0, feito: mesFechado },
+    {
+      key: "conferir",
+      label: "Conferir",
+      count: aConciliar,
+      feito: aConciliar === 0 && !saldoDivergente,
+    },
+    { key: "fechar", label: "Fechar", count: 0, feito: mesFechado || !podeFechar },
   ] as const;
 
   const indiceAtual = passos.findIndex((p) => !p.feito);
@@ -194,12 +277,18 @@ export default async function HojePage({ params }: { params: Promise<{ companyId
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Olá, {session.company.name}</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {formatMonth(inicioDoMes)} · saldo consolidado{" "}
-          <Money cents={saldoAtual} className="font-medium" />
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Olá, {session.company.name}</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            saldo consolidado <Money cents={saldoAtual} className="font-medium" />
+          </p>
+        </div>
+        <MesDeTrabalho
+          companyId={companyId}
+          periodo={periodoTrabalho}
+          emAutomatico={!periodoManual}
+        />
       </div>
 
       <Card>
@@ -219,8 +308,9 @@ export default async function HojePage({ params }: { params: Promise<{ companyId
 
       {tudoEmDia ? (
         <Alert tone="success" title="Tudo em dia">
-          {formatMonth(inicioDoMes)} está revisado, cobrado, conferido e fechado. Não há nada
-          esperando você agora.
+          {mesFechado
+            ? `${formatMonth(periodoTrabalho)} está revisado, cobrado, conferido e fechado. Não há nada esperando você agora.`
+            : `${formatMonth(periodoTrabalho)} está revisado, cobrado e conferido. Assim que o mês terminar, feche por aqui.`}
         </Alert>
       ) : (
         <ProximaAcao
@@ -231,11 +321,13 @@ export default async function HojePage({ params }: { params: Promise<{ companyId
               ? `Último extrato: ${new Date(lastImport.created_at).toLocaleDateString("pt-BR")}${lastImport.file_name ? ` (${lastImport.file_name})` : ""}`
               : "Nenhum extrato importado ainda."
           }
+          contasSemExtrato={contasSemExtrato}
           linhasPendentes={linhasPendentes}
           notasVencidas={notasVencidas}
           aConciliar={aConciliar}
-          mes={formatMonth(inicioDoMes)}
-          periodo={inicioDoMes}
+          saldoDivergente={saldoDivergente}
+          mes={formatMonth(periodoTrabalho)}
+          periodo={periodoTrabalho}
           canWrite={canWrite}
         />
       )}
@@ -247,9 +339,11 @@ function ProximaAcao({
   companyId,
   passoKey,
   lastImportLabel,
+  contasSemExtrato,
   linhasPendentes,
   notasVencidas,
   aConciliar,
+  saldoDivergente,
   mes,
   periodo,
   canWrite,
@@ -257,9 +351,11 @@ function ProximaAcao({
   companyId: string;
   passoKey: "extrato" | "revisar" | "notas" | "conferir" | "fechar";
   lastImportLabel: string;
+  contasSemExtrato: number;
   linhasPendentes: number;
   notasVencidas: number;
   aConciliar: number;
+  saldoDivergente: boolean;
   mes: string;
   periodo: IsoDate;
   canWrite: boolean;
@@ -285,7 +381,7 @@ function ProximaAcao({
   > = {
     extrato: {
       icon: Upload,
-      titulo: `Suba o extrato de ${mes}`,
+      titulo: `${contasSemExtrato} conta(s) sem extrato de ${mes}`,
       descricao: lastImportLabel,
       acaoLabel: "Subir extrato",
       href: routes.home(companyId),
@@ -307,8 +403,12 @@ function ProximaAcao({
     },
     conferir: {
       icon: CheckCircle2,
-      titulo: `${aConciliar} lançamento(s) ainda não conciliado(s)`,
-      descricao: "Confira se todo lançamento tem uma linha do extrato correspondente.",
+      titulo: saldoDivergente
+        ? "O saldo do sistema não bate com o extrato"
+        : `${aConciliar} lançamento(s) ainda não conciliado(s)`,
+      descricao: saldoDivergente
+        ? "Pelo menos uma conta tem diferença entre o saldo declarado no extrato e o calculado pelo sistema."
+        : "Confira se todo lançamento tem uma linha do extrato correspondente.",
       acaoLabel: "Conferir em Conciliação",
       href: routes.reconciliation(companyId),
     },
