@@ -12,8 +12,16 @@
 
 "use server";
 
-import type { PaymentMethod } from "@aec/db";
-import { parseUserInput, toDb } from "@aec/domain";
+import type { PaymentMethod, Transaction } from "@aec/db";
+import {
+  canSettle,
+  canUnsettle,
+  fromDb,
+  parseUserInput,
+  startOfMonth,
+  toDb,
+  type TransactionState,
+} from "@aec/domain";
 import { MoneyError } from "@aec/domain";
 import { revalidatePath } from "next/cache";
 
@@ -46,6 +54,112 @@ function traduzErro(error: { code?: string; message: string }): string {
     return "Conta, categoria ou contraparte nao pertence a esta empresa.";
   }
   return error.message;
+}
+
+type SupabaseServerClient = Awaited<ReturnType<typeof createServerSupabase>>;
+
+/**
+ * Carrega um lancamento e monta o `TransactionState` (@aec/domain) que
+ * `editLocks`/`canSettle`/`canUnsettle` precisam — sem isto, cada Server
+ * Action teria que remontar essas tres consultas na mao. Mes fechado e
+ * verificado aqui (nao so pela RLS) para a mensagem de erro vir clara
+ * ANTES de qualquer escrita, em vez do 42501 generico do Postgres.
+ */
+async function carregarLancamento(
+  supabase: SupabaseServerClient,
+  companyId: string,
+  transactionId: string,
+): Promise<{ ok: true; row: Transaction; state: TransactionState } | { ok: false; error: string }> {
+  const txResult = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("id", transactionId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (txResult.error) return { ok: false, error: traduzErro(txResult.error) };
+  if (!txResult.data) return { ok: false, error: "Lancamento nao encontrado." };
+  const row = txResult.data as Transaction;
+
+  const [settlementResult, closingResult] = await Promise.all([
+    supabase.from("invoice_settlements").select("id").eq("transaction_id", row.id).limit(1),
+    supabase
+      .from("monthly_closings")
+      .select("locked_at")
+      .eq("company_id", companyId)
+      .eq("period", startOfMonth(row.booking_date))
+      .maybeSingle(),
+  ]);
+
+  if (settlementResult.error) return { ok: false, error: traduzErro(settlementResult.error) };
+  if (closingResult.error) return { ok: false, error: traduzErro(closingResult.error) };
+
+  const state: TransactionState = {
+    status: row.status,
+    reconciled: row.reconciliation === "conciliado",
+    hasInvoiceSettlement: (settlementResult.data?.length ?? 0) > 0,
+    isTransfer: row.is_transfer,
+    periodLocked: Boolean(closingResult.data?.locked_at),
+  };
+
+  return { ok: true, row, state };
+}
+
+/** Mensagem por motivo de trava, na ordem em que `canUnsettle` as verifica. */
+function motivoBloqueioDesfazer(state: TransactionState): string {
+  if (state.periodLocked) {
+    return "O mes deste lancamento esta fechado. Reabra o fechamento para voltar para previsto.";
+  }
+  if (state.isTransfer) {
+    return "Uma perna de transferencia nao volta para previsto — exclua a transferencia e lance de novo.";
+  }
+  if (state.hasInvoiceSettlement) {
+    return "Este lancamento ja tem baixa de nota fiscal — desfaca a baixa em Recebimentos antes de voltar para previsto.";
+  }
+  if (state.reconciled) {
+    return "Este lancamento ja foi conciliado com o extrato — desfaca a conciliacao antes de voltar para previsto.";
+  }
+  return "Somente lancamentos realizados podem voltar para previsto.";
+}
+
+/** Mensagem por motivo de trava, na ordem em que `canSettle` as verifica. */
+function motivoBloqueioBaixa(state: TransactionState): string {
+  if (state.periodLocked) {
+    return "O mes deste lancamento esta fechado. Reabra o fechamento para dar baixa.";
+  }
+  if (state.isTransfer) {
+    return "Uma perna de transferencia nao recebe baixa.";
+  }
+  if (state.status !== "previsto") {
+    return "Somente lancamentos previstos podem receber baixa.";
+  }
+  return "Nao foi possivel dar baixa neste lancamento.";
+}
+
+/**
+ * Confere se o mes de uma data futura (diferente da que o lancamento ja
+ * tem) esta aberto, ANTES de escrever — sem isto, a RLS recusaria em
+ * silencio (mesmo buraco de `settle_transaction`, ver abaixo) e a tela
+ * diria "salvo" sem nada ter mudado.
+ */
+async function mesDestinoFechado(
+  supabase: SupabaseServerClient,
+  companyId: string,
+  bookingDate: string,
+): Promise<{ error: string } | null> {
+  const { data, error } = await supabase
+    .from("monthly_closings")
+    .select("locked_at")
+    .eq("company_id", companyId)
+    .eq("period", startOfMonth(bookingDate))
+    .maybeSingle();
+  if (error) return { error: traduzErro(error) };
+  if (data?.locked_at) {
+    return {
+      error: `O mes de destino (${bookingDate}) esta fechado. Escolha outra data ou reabra o fechamento.`,
+    };
+  }
+  return null;
 }
 
 interface LancamentoInput {
@@ -175,23 +289,136 @@ export async function criarTransferencia(input: {
   return OK;
 }
 
-export async function darBaixa(
-  companyId: string,
-  transactionId: string,
-  bookingDate?: string,
-): Promise<ActionResult> {
+/**
+ * Da baixa num previsto com a data e o valor que de fato caíram — ate esta
+ * leva, `darBaixa` so aceitava a data (e nem essa era usada na tela), e o
+ * caso normal ("previsto R$1.000 pro dia 5, caiu R$1.012,30 no dia 8") nao
+ * tinha como ser registrado.
+ */
+export async function darBaixa(input: {
+  companyId: string;
+  transactionId: string;
+  /** Vazio mantem a data do previsto. */
+  bookingDate?: string;
+  /** Vazio mantem o valor do previsto. SEMPRE positivo — o sinal vem do servidor. */
+  amount?: string;
+}): Promise<ActionResult> {
   const supabase = await createServerSupabase();
 
-  const { error } = await supabase.rpc("settle_transaction", {
-    p_transaction_id: transactionId,
-    p_booking_date: bookingDate ?? null,
-    p_amount: null,
+  const carregado = await carregarLancamento(supabase, input.companyId, input.transactionId);
+  if (!carregado.ok) return { ok: false, error: carregado.error };
+  const { row, state } = carregado;
+
+  if (!canSettle(state)) return { ok: false, error: motivoBloqueioBaixa(state) };
+
+  const bookingDate = input.bookingDate?.trim() || row.booking_date;
+  if (bookingDate !== row.booking_date) {
+    const bloqueado = await mesDestinoFechado(supabase, input.companyId, bookingDate);
+    if (bloqueado) return { ok: false, error: bloqueado.error };
+  }
+
+  let valorAbsoluto: number | null = null;
+  if (input.amount?.trim()) {
+    try {
+      valorAbsoluto = Math.abs(parseUserInput(input.amount));
+    } catch {
+      return { ok: false, error: `Valor invalido: ${input.amount}` };
+    }
+    if (valorAbsoluto === 0) return { ok: false, error: "O valor precisa ser diferente de zero." };
+  }
+
+  // O sinal SEMPRE vem do previsto original, nunca do que a pessoa digitou —
+  // um valor digitado positivo num previsto de saida nao pode virar receita
+  // e inverter o resultado do mes inteiro sem aviso nenhum.
+  const valorComSinal =
+    valorAbsoluto === null ? null : toDb(fromDb(row.amount) < 0 ? -valorAbsoluto : valorAbsoluto);
+
+  const { data, error } = await supabase.rpc("settle_transaction", {
+    p_transaction_id: input.transactionId,
+    p_booking_date: bookingDate,
+    p_amount: valorComSinal,
   });
 
   if (error) return { ok: false, error: traduzErro(error) };
+  // settle_transaction nao tem `if not found` apos o UPDATE (endurecido na
+  // migration desta leva, mas o app nao pode confiar so nela): RLS
+  // recusando em silencio devolve uma linha com todos os campos nulos, sem
+  // erro nenhum. Sem esta checagem a tela diria "baixa dada" e nada teria
+  // acontecido.
+  if (!data?.id) {
+    return {
+      ok: false,
+      error: "Nada foi alterado. Confira se o mes esta aberto e se seu perfil permite lancar.",
+    };
+  }
 
-  revalidatePath(`/${companyId}/lancamentos`);
-  revalidatePath(`/${companyId}/painel`);
+  revalidatePath(`/${input.companyId}/lancamentos`);
+  revalidatePath(`/${input.companyId}/previstos`);
+  revalidatePath(`/${input.companyId}/painel`);
+  return OK;
+}
+
+/**
+ * Volta um realizado para previsto — desfaz uma baixa, ou corrige "lancei
+ * como realizado mas o dinheiro ainda nao caiu". Nao existe coluna que
+ * distinga os dois casos: `settle_transaction` sempre atualiza a linha no
+ * lugar, entao o caminho de volta e o mesmo pros dois.
+ */
+export async function desfazerBaixa(input: {
+  companyId: string;
+  transactionId: string;
+  /** Vazio mantem a data atual (a que a baixa gravou). */
+  bookingDate?: string;
+  /** Vazio mantem o valor atual. SEMPRE positivo — o sinal vem do servidor. */
+  amount?: string;
+}): Promise<ActionResult> {
+  const supabase = await createServerSupabase();
+
+  const carregado = await carregarLancamento(supabase, input.companyId, input.transactionId);
+  if (!carregado.ok) return { ok: false, error: carregado.error };
+  const { row, state } = carregado;
+
+  if (!canUnsettle(state)) return { ok: false, error: motivoBloqueioDesfazer(state) };
+
+  const bookingDate = input.bookingDate?.trim() || row.booking_date;
+  if (bookingDate !== row.booking_date) {
+    const bloqueado = await mesDestinoFechado(supabase, input.companyId, bookingDate);
+    if (bloqueado) return { ok: false, error: bloqueado.error };
+  }
+
+  let valorAbsoluto: number | null = null;
+  if (input.amount?.trim()) {
+    try {
+      valorAbsoluto = Math.abs(parseUserInput(input.amount));
+    } catch {
+      return { ok: false, error: `Valor invalido: ${input.amount}` };
+    }
+    if (valorAbsoluto === 0) return { ok: false, error: "O valor precisa ser diferente de zero." };
+  }
+
+  const valorComSinal =
+    valorAbsoluto === null
+      ? row.amount
+      : toDb(fromDb(row.amount) < 0 ? -valorAbsoluto : valorAbsoluto);
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .update({ status: "previsto", booking_date: bookingDate, amount: valorComSinal })
+    .eq("id", input.transactionId)
+    .eq("company_id", input.companyId)
+    .select("id");
+
+  if (error) return { ok: false, error: traduzErro(error) };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: "Nada foi alterado. Confira se o mes esta aberto e se seu perfil permite lancar.",
+    };
+  }
+
+  revalidatePath(`/${input.companyId}/lancamentos`);
+  revalidatePath(`/${input.companyId}/previstos`);
+  revalidatePath(`/${input.companyId}/painel`);
   return OK;
 }
 

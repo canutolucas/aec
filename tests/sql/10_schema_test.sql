@@ -1255,6 +1255,97 @@ end $$;
 reset role;
 
 \echo ''
+\echo '== Baixa de previsto (settle_transaction) =='
+-- settle_transaction nunca teve teste nenhum antes desta leva. Junho fica
+-- aberto (baixa com data/valor reais); julho e fechado logo em seguida
+-- (baixa/status em mes fechado).
+insert into public.transactions
+  (id, company_id, bank_account_id, booking_date, competence_date, amount, status, description)
+values
+  ('f1f1f1f1-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'a1a1a1a1-0000-0000-0000-000000000001', '2025-06-05', '2025-06-05', -1000.00, 'previsto',
+   'Aluguel previsto junho'),
+  ('f1f1f1f1-0000-0000-0000-000000000004', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'a1a1a1a1-0000-0000-0000-000000000001', '2025-06-12', '2025-06-12', -200.00, 'realizado',
+   'Realizado de junho, so pra testar bloqueio de papel'),
+  ('f1f1f1f1-0000-0000-0000-000000000003', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'a1a1a1a1-0000-0000-0000-000000000001', '2025-07-05', '2025-07-05', -300.00, 'previsto',
+   'Previsto de julho, mes vai fechar'),
+  ('f1f1f1f1-0000-0000-0000-000000000005', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+   'a1a1a1a1-0000-0000-0000-000000000001', '2025-07-10', '2025-07-10', -700.00, 'realizado',
+   'Realizado de julho, mes vai fechar');
+
+set role authenticated;
+do $$ begin
+  perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+    $q$select public.close_month('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2025-07-01')$q$);
+end $$;
+
+-- Baixa com data e valor reais: o previsto era -1000,00 em 05/06, o
+-- dinheiro caiu -1012,30 em 08/06 — grava os dois, e o sinal negativo
+-- mantem a direcao "saida" (coluna gerada a partir do sinal).
+do $$
+declare v_date date; v_amount numeric; v_direction text;
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', '22222222-2222-2222-2222-222222222222')::text, true);
+
+  select (r).booking_date, (r).amount, (r).direction::text
+    into v_date, v_amount, v_direction
+  from (select public.settle_transaction(
+    'f1f1f1f1-0000-0000-0000-000000000001', '2025-06-08', -1012.30) as r) s;
+
+  perform pg_temp.assert(v_date = '2025-06-08', 'baixa grava a data em que o dinheiro andou');
+  perform pg_temp.assert(v_amount = -1012.30, 'baixa grava o valor que de fato caiu');
+  perform pg_temp.assert(v_direction = 'saida', 'valor negativo na baixa mantem a direcao saida');
+end $$;
+
+-- BUG CONHECIDO, fechado pela migration de guardas desta leva (ainda nao
+-- aplicada neste ponto do arquivo): settle_transaction nao tem `if not
+-- found` apos o UPDATE. RLS recusando em mes fechado nao levanta excecao —
+-- o UPDATE so afeta zero linhas, e a funcao devolve uma linha com todo
+-- campo nulo, sem erro nenhum. E exatamente por isto que a Server Action
+-- (apps/web/lib/db/transactions.ts) confere `data?.id`, nao so `error`.
+do $$
+declare v_new_id uuid;
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', '11111111-1111-1111-1111-111111111111')::text, true);
+
+  select (r).id into v_new_id
+  from (select public.settle_transaction(
+    'f1f1f1f1-0000-0000-0000-000000000003', '2025-07-05', -300.00) as r) s;
+
+  perform pg_temp.assert(v_new_id is null,
+    'settle_transaction em mes fechado devolve linha nula, sem erro (por isso a Server Action confere o retorno)'
+  );
+end $$;
+
+-- Voltar para previsto (o UPDATE que desfazerBaixa faz direto, sem RPC):
+-- mes aberto deixa, mes fechado e papel insuficiente nao.
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('22222222-2222-2222-2222-222222222222',
+    $q$update public.transactions set status = 'previsto'
+       where id = 'f1f1f1f1-0000-0000-0000-000000000001'$q$) = 1,
+  'assistente volta um realizado de mes aberto para previsto'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('22222222-2222-2222-2222-222222222222',
+    $q$update public.transactions set status = 'previsto'
+       where id = 'f1f1f1f1-0000-0000-0000-000000000005'$q$) = 0,
+  'ninguem volta um realizado de mes fechado para previsto'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('33333333-3333-3333-3333-333333333333',
+    $q$update public.transactions set status = 'previsto'
+       where id = 'f1f1f1f1-0000-0000-0000-000000000004'$q$) = 0,
+  'cliente_leitura nao consegue voltar lancamento para previsto, mesmo em mes aberto'
+); end $$;
+reset role;
+
+\echo ''
 \echo '== Criacao de empresa =='
 set role authenticated;
 do $$

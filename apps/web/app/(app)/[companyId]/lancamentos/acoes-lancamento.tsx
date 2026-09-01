@@ -1,11 +1,14 @@
 "use client";
 
 import type { Transaction } from "@aec/db";
-import { useState, useTransition } from "react";
+import { ConfirmDialog } from "@aec/ui";
+import { useState } from "react";
 
-import { darBaixa, excluirLancamento } from "@/lib/db/transactions";
+import { excluirLancamento } from "@/lib/db/transactions";
 
-/** Row actions for one transaction: settle a forecast, or delete it. */
+import { BaixaDialog } from "./baixa-dialog";
+
+/** Row actions for one transaction: settle a forecast, undo it, or delete it. */
 export function AcoesLancamento({
   companyId,
   lancamento,
@@ -16,27 +19,28 @@ export function AcoesLancamento({
   podeEditar: boolean;
 }) {
   const [erro, setErro] = useState<string | null>(null);
-  const [pendente, iniciar] = useTransition();
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+  const [dialogoBaixa, setDialogoBaixa] = useState<"baixar" | "previsto" | null>(null);
 
   if (!podeEditar) return null;
 
-  function excluir() {
-    // Deleting is irreversible for the person operating the screen (the
-    // audit trail keeps it, but the screen doesn't undo it), so confirm first.
-    if (!confirm(`Excluir "${lancamento.description}"?`)) return;
-
-    iniciar(async () => {
-      const resultado = await excluirLancamento(companyId, lancamento.id);
-      if (!resultado.ok) setErro(resultado.error ?? "Nao foi possivel excluir.");
-    });
+  // ConfirmDialog espera onConfirm ate a Promise resolver antes de fechar —
+  // por isso excluir() e passado direto, sem envolver em useTransition (que
+  // nao devolve promise nenhuma e faria o dialogo fechar antes da exclusao
+  // terminar de verdade).
+  async function excluir() {
+    const resultado = await excluirLancamento(companyId, lancamento.id);
+    if (!resultado.ok) setErro(resultado.error ?? "Nao foi possivel excluir.");
   }
 
-  function baixar() {
-    iniciar(async () => {
-      const resultado = await darBaixa(companyId, lancamento.id);
-      if (!resultado.ok) setErro(resultado.error ?? "Nao foi possivel dar baixa.");
-    });
-  }
+  // Voltar para previsto so faz sentido pra quem nao esta conciliado nem e
+  // transferencia — a checagem final (inclusive baixa de nota fiscal) e do
+  // servidor, que devolve uma mensagem clara se o botao aparecer num caso
+  // que ele nao cobre.
+  const podeTentarVoltar =
+    lancamento.status === "realizado" &&
+    lancamento.reconciliation !== "conciliado" &&
+    !lancamento.is_transfer;
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -48,26 +52,53 @@ export function AcoesLancamento({
        * dois não passam pelo componente Button.
        */}
       <div className="flex justify-end gap-4 sm:gap-2">
-        {lancamento.status === "previsto" && (
+        {lancamento.status === "previsto" && !lancamento.is_transfer && (
           <button
             type="button"
-            onClick={baixar}
-            disabled={pendente}
+            onClick={() => setDialogoBaixa("baixar")}
             className="text-primary -my-2.5 py-2.5 text-xs underline-offset-2 hover:underline disabled:opacity-50 sm:my-0 sm:py-0"
           >
             dar baixa
           </button>
         )}
+        {podeTentarVoltar && (
+          <button
+            type="button"
+            onClick={() => setDialogoBaixa("previsto")}
+            className="text-muted-foreground -my-2.5 py-2.5 text-xs underline-offset-2 hover:underline disabled:opacity-50 sm:my-0 sm:py-0"
+          >
+            voltar p/ previsto
+          </button>
+        )}
         <button
           type="button"
-          onClick={excluir}
-          disabled={pendente}
+          onClick={() => setConfirmandoExclusao(true)}
           className="text-muted-foreground hover:text-outflow -my-2.5 py-2.5 text-xs underline-offset-2 hover:underline disabled:opacity-50 sm:my-0 sm:py-0"
         >
           excluir
         </button>
       </div>
       {erro && <p className="text-destructive text-xs">{erro}</p>}
+
+      {dialogoBaixa && (
+        <BaixaDialog
+          companyId={companyId}
+          lancamento={lancamento}
+          modo={dialogoBaixa}
+          open={dialogoBaixa !== null}
+          onOpenChange={(open) => !open && setDialogoBaixa(null)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={confirmandoExclusao}
+        onOpenChange={setConfirmandoExclusao}
+        title="Excluir lançamento?"
+        description={`"${lancamento.description}" será removido. A trilha de auditoria mantém o registro, mas esta tela não desfaz.`}
+        confirmLabel="Excluir"
+        tone="danger"
+        onConfirm={excluir}
+      />
     </div>
   );
 }
