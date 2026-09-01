@@ -727,6 +727,83 @@ tocar nenhum call site. `tests/sql/10_schema_test.sql` tem os dois casos:
 mês fechado agora recusa com mensagem clara em vez de devolver linha nula,
 e um valor de sinal errado é recusado.
 
+### A leva da carteira — conta nova, base limpa e o cérebro da contadora (01/09/2026)
+
+Lucas pediu três coisas com a sogra indisponível (ela cuida do financeiro de
+várias empresas — inclusive da própria empresa dela — e o pedido foi
+literalmente "simule o cérebro dela"): limpar a base de teste para a
+experiência de primeiro uso, habilitar o cadastro de conta (até então
+impossível — `/login` só sabia entrar, `add_member` recusa quem ainda não
+tem login), e uma varredura do sistema como se fosse ela avaliando.
+
+**Diagnóstico** (contra o código, não palpite): a carteira não existia como
+conceito — `/empresas` era só uma lista de nomes com botão "Abrir", sem um
+número sequer, mesmo o schema sendo multiempresa desde a primeira migration.
+A esteira de `/hoje` ancorava sempre no mês corrente — em 1º de setembro ela
+está fechando agosto, e o app já mandava "suba o extrato de setembro" no
+dia 2. O passo "Extrato" só testava se existia _qualquer_ importação no mês,
+não se o extrato cobria o mês inteiro. Não havia calendário de fechamento —
+`monthly_closings` só era consultado um mês por vez, em três telas
+diferentes. A prova de saldo (`checkBalance`) já existia, mas só em
+`/conciliacao` — o fechamento não perguntava "o saldo bate?". `recurrences`
+e `expandRecurrence()` estavam prontos e testados desde a primeira leva de
+schema e nunca tinham sido ligados a nenhuma tela. Nenhum relatório
+comparava meses, e `v_monthly_category_summary` sempre expôs
+`period_accrual` (competência) ao lado de `period_cash`, sem nenhuma tela
+consultando a segunda coluna.
+
+- **Cadastro de conta e recuperação de senha**: `apps/web/app/(auth)/cadastrar`,
+  `esqueci-senha`, `nova-senha` e a rota `apps/web/app/auth/callback` (troca
+  o `code` do link de e-mail pela sessão real, fluxo PKCE). `full_name` vai
+  em `raw_user_meta_data` — é o que `on_auth_user_created` lê pra popular
+  `public.profiles`. `apps/web/lib/db/site-url.ts` monta o link do e-mail
+  lendo o host da própria requisição, sem variável de ambiente nova.
+  **Passo manual do Lucas**: em Authentication → URL Configuration no painel
+  do Supabase, o Site URL e as Redirect URLs precisam incluir o domínio da
+  Vercel + `/auth/callback` — sem isso o link do e-mail volta pra
+  `localhost`.
+- **Carteira de empresas**: `/empresas` vira um painel com uma linha por
+  empresa — saldo consolidado, contas sem extrato do mês, movimentos sem
+  revisar, lançamentos sem conciliar, notas vencidas/a receber, mês
+  fechado/aberto — ordenada por quem precisa de atenção primeiro. 6
+  consultas com `.in("company_id", ids)`, agrupadas em JS: não cresce com o
+  número de empresas. Com mais de uma empresa, `/` aterrissa ali em vez de
+  `companies[0]` (a mais antiga, arbitrária).
+- **`packages/domain/src/monthly-cycle.ts`**: `workingMonth()` decide em que
+  mês a contadora está de fato trabalhando (o anterior, enquanto não
+  fechado); `canCloseMonth()` recusa um mês que ainda não terminou;
+  `statementCoverage()` distingue "teve alguma importação no mês" de
+  "o extrato alcança o FIM do mês". `apps/web/lib/db/prova-de-saldo.ts`
+  extrai o cálculo de `checkBalance` de `/conciliacao` para ser reusado.
+- **A esteira no mês certo + `/fechamentos`**: `/hoje` usa `workingMonth()`
+  com um seletor de mês (`?mes=`) que sempre volta pro automático; o passo
+  Extrato usa `statementCoverage()`; o passo Conferir incorpora a prova de
+  saldo; o passo Fechar usa `canCloseMonth()` — um mês em curso não vira um
+  CTA de "feche" vazio. `/fechamentos` (nova rota, 5ª sub-aba de
+  Movimentos) é o calendário dos últimos 12 meses, reusando `FechamentoMes`
+  sem alterá-lo.
+- **Recorrências**: `apps/web/lib/db/recorrencias.ts` liga a tabela
+  `recurrences` e `expandRecurrence()` — `criarRecorrencia`/
+  `editarRecorrencia`/`definirRecorrenciaAtiva` (com a mesma checagem de
+  zero-linhas-afetadas que `cadastros.ts` já estabeleceu) e
+  `gerarPrevistos`, que segue a convenção de auto-aplicação deste repo: um
+  INSERT independente por ocorrência, bucket `criados`/`jaExistiam`/
+  `falharam` explícito, `generated_until` como guarda contra duplicata.
+  `/recorrencias` (nova rota, 5ª sub-aba de Ajustes, escondida no modo
+  simples) tem o cadastro e o botão "Gerar previstos agora" — clique
+  explícito, nada escreve sozinho ao abrir a tela.
+- **Evolução mensal e competência**: `/evolucao` (nova rota, sub-aba de
+  Relatórios) mostra os últimos 12 meses — entradas, saídas, resultado,
+  saldo ao fim de cada um — reusando `project()` (o mesmo motor de
+  `/relatorios`) sobre a janela inteira, em vez de recalcular saldo mês a
+  mês na mão. `/relatorio-categorias` ganha o alternador "Por caixa / Por
+  competência", trocando `period_cash` por `period_accrual` no filtro.
+
+Nenhuma migration nesta leva — as seis mudanças só ligam schema e views que
+já existiam. A limpeza da base (para a experiência de primeiro uso) foi só
+SQL entregue no corpo da mensagem (`truncate ... cascade` em `companies`,
+mantendo `auth.users`/`profiles`), não um commit.
+
 ## Fases do projeto — o que falta
 
 Todas as fases planejadas foram concluídas ou encerradas por decisão.
@@ -776,12 +853,17 @@ completa (Fases 1a–1e, 2a, 2b, 3, 4, 5 — ver seção acima).
 - Toda migration nova precisa ser colada manualmente pelo usuário no SQL
   Editor do Supabase em produção — este sandbox não tem acesso ao banco real.
   `20250101001800_account_profiles.sql` (Fase 2a),
-  `20250101002000_seed_categories_on_create_company.sql` (Fase 4) e
-  `20250101002100_audit_triggers_restantes.sql` (trilha de auditoria) foram
-  aplicadas em 2026-08-29. **Pendente agora:**
+  `20250101002000_seed_categories_on_create_company.sql` (Fase 4),
+  `20250101002100_audit_triggers_restantes.sql` (trilha de auditoria) e
   `20250101002200_settle_transaction_guards.sql` (leva do dia a dia,
-  01/09/2026 — ver seção acima; SQL completo na mensagem que entregou esta
-  leva).
+  01/09/2026) foram todas aplicadas. Nenhuma migration pendente no momento
+  — a leva da carteira (mesma data, ver seção acima) não precisou de
+  nenhuma.
+- **Passo manual pendente da leva da carteira**: em Authentication → URL
+  Configuration no painel do Supabase, cadastrar o Site URL e as Redirect
+  URLs com o domínio da Vercel + `/auth/callback` — sem isso o link de
+  confirmação de cadastro e o de redefinição de senha voltam pra
+  `localhost` em vez do domínio real.
 - O parser de NFS-e foi validado contra UM município real (Salvador/BA,
   ABRASF v1). Um XML de outra prefeitura pode expor variações de layout ainda
   não cobertas pelos sinônimos de tag em `nfse.ts`.
