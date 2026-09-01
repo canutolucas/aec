@@ -1,6 +1,6 @@
 "use client";
 
-import type { Transaction } from "@aec/db";
+import type { BankAccount, Category, CostCenter, Counterparty, Transaction } from "@aec/db";
 import { fromDb } from "@aec/domain";
 import {
   createColumnHelper,
@@ -20,6 +20,8 @@ export interface LancamentoRow extends Transaction {
   readonly contaNome: string;
   readonly categoriaNome: string | null;
   readonly memoExtrato: string | null;
+  /** Se ja quitou (parte de) uma nota fiscal — trava a edicao do valor. */
+  readonly temBaixaDeNota: boolean;
 }
 
 const columnHelper = createColumnHelper<LancamentoRow>();
@@ -33,10 +35,18 @@ export function LancamentosTable({
   companyId,
   lancamentos,
   podeEditar,
+  contas,
+  categorias,
+  contrapartes,
+  centrosDeCusto,
 }: {
   companyId: string;
   lancamentos: readonly LancamentoRow[];
   podeEditar: boolean;
+  contas: readonly BankAccount[];
+  categorias: readonly Category[];
+  contrapartes: readonly Counterparty[];
+  centrosDeCusto: readonly CostCenter[];
 }) {
   const [lancamentoAbertoId, setLancamentoAbertoId] = useState<string | null>(null);
 
@@ -179,6 +189,10 @@ export function LancamentosTable({
         companyId={companyId}
         lancamento={lancamentoAberto}
         podeEditar={podeEditar}
+        contas={contas}
+        categorias={categorias}
+        contrapartes={contrapartes}
+        centrosDeCusto={centrosDeCusto}
         open={lancamentoAbertoId !== null}
         onOpenChange={(open) => {
           if (!open) setLancamentoAbertoId(null);

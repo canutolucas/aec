@@ -1346,6 +1346,49 @@ do $$ begin perform pg_temp.assert(
 reset role;
 
 \echo ''
+\echo '== Editar lancamento existente =='
+-- editarLancamento (apps/web/lib/db/transactions.ts) e um UPDATE direto na
+-- tabela: estes testes provam as garantias de schema que a Server Action
+-- conta pra decidir o que pode mudar (editLocks, @aec/domain). O lancamento
+-- 0001 chega aqui como previsto, 08/06, -1012,30 (ver secao anterior).
+set role authenticated;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('22222222-2222-2222-2222-222222222222',
+    $q$update public.transactions set amount = -1500.00
+       where id = 'f1f1f1f1-0000-0000-0000-000000000001'$q$) = 1,
+  'editar o valor de um lancamento em mes aberto e permitido'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('22222222-2222-2222-2222-222222222222',
+    $q$update public.transactions set amount = -999.00
+       where id = 'f1f1f1f1-0000-0000-0000-000000000005'$q$) = 0,
+  'editar o valor de um lancamento em mes fechado nao e permitido'
+); end $$;
+
+-- Mesmo se a tela falhasse em travar o Select de categoria, o trigger
+-- continua recusando: 0001 e uma saida, c1c1c1c1-...0001 e uma categoria
+-- de entrada.
+do $$ begin perform pg_temp.expect_denied(
+  '11111111-1111-1111-1111-111111111111',
+  $q$update public.transactions set category_id = 'c1c1c1c1-0000-0000-0000-000000000001'
+     where id = 'f1f1f1f1-0000-0000-0000-000000000001'$q$,
+  'nao da para reclassificar uma saida numa categoria de entrada'
+); end $$;
+
+-- Arrastar a data de um lancamento de mes aberto para dentro de um mes
+-- fechado tambem nao pode — mesmo WITH CHECK que ja provamos em "Trava de
+-- mes fechado", agora do lado da edicao completa, nao so do dar-baixa.
+do $$ begin perform pg_temp.expect_denied(
+  '11111111-1111-1111-1111-111111111111',
+  $q$update public.transactions set booking_date = '2025-07-20'
+     where id = 'f1f1f1f1-0000-0000-0000-000000000001'$q$,
+  'nao da para arrastar a data de um lancamento para dentro de mes fechado'
+); end $$;
+reset role;
+
+\echo ''
 \echo '== Criacao de empresa =='
 set role authenticated;
 do $$

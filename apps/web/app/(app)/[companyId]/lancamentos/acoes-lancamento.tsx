@@ -1,12 +1,12 @@
 "use client";
 
-import type { Transaction } from "@aec/db";
 import { ConfirmDialog } from "@aec/ui";
 import { useState } from "react";
 
 import { excluirLancamento } from "@/lib/db/transactions";
 
 import { BaixaDialog } from "./baixa-dialog";
+import type { LancamentoRow } from "./lancamentos-table";
 
 /** Row actions for one transaction: settle a forecast, undo it, or delete it. */
 export function AcoesLancamento({
@@ -15,7 +15,7 @@ export function AcoesLancamento({
   podeEditar,
 }: {
   companyId: string;
-  lancamento: Transaction;
+  lancamento: LancamentoRow;
   podeEditar: boolean;
 }) {
   const [erro, setErro] = useState<string | null>(null);
@@ -33,14 +33,15 @@ export function AcoesLancamento({
     if (!resultado.ok) setErro(resultado.error ?? "Nao foi possivel excluir.");
   }
 
-  // Voltar para previsto so faz sentido pra quem nao esta conciliado nem e
-  // transferencia — a checagem final (inclusive baixa de nota fiscal) e do
-  // servidor, que devolve uma mensagem clara se o botao aparecer num caso
-  // que ele nao cobre.
+  // Voltar para previsto so faz sentido pra quem nao esta conciliado, nem e
+  // transferencia, nem ja tem baixa de nota fiscal — a checagem final ainda
+  // e do servidor (mes fechado, entre outros), que devolve uma mensagem
+  // clara se o botao aparecer num caso que ele nao cobre.
   const podeTentarVoltar =
     lancamento.status === "realizado" &&
     lancamento.reconciliation !== "conciliado" &&
-    !lancamento.is_transfer;
+    !lancamento.is_transfer &&
+    !lancamento.temBaixaDeNota;
 
   return (
     <div className="flex flex-col items-end gap-1">

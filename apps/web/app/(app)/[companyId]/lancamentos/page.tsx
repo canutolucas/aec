@@ -125,6 +125,21 @@ export default async function LancamentosPage({
     ),
   );
 
+  // Quais lancamentos ja quitaram (parte de) uma nota fiscal — trava a
+  // edicao do valor (o rateio da nota depende dele). Mesmo padrao de
+  // consulta em lote do memo do extrato, uma linha acima.
+  const settlementsResult =
+    idsLancamentos.length > 0
+      ? await supabase
+          .from("invoice_settlements")
+          .select("transaction_id")
+          .eq("company_id", companyId)
+          .in("transaction_id", idsLancamentos)
+      : { data: [] };
+  const comBaixaDeNota = new Set(
+    (settlementsResult.data ?? []).map((linha) => linha.transaction_id),
+  );
+
   const nomePorConta = new Map(contas.map((conta) => [conta.id, conta.name]));
   const nomePorCategoria = new Map(categorias.map((categoria) => [categoria.id, categoria.name]));
 
@@ -214,6 +229,10 @@ export default async function LancamentosPage({
             <LancamentosTable
               companyId={companyId}
               podeEditar={podeLancar && !mesFechado}
+              contas={contas}
+              categorias={categorias}
+              contrapartes={contrapartes}
+              centrosDeCusto={centrosDeCusto}
               lancamentos={lancamentos.map((lancamento): LancamentoRow => ({
                 ...lancamento,
                 contaNome: nomePorConta.get(lancamento.bank_account_id) ?? "—",
@@ -221,6 +240,7 @@ export default async function LancamentosPage({
                   ? (nomePorCategoria.get(lancamento.category_id) ?? "—")
                   : null,
                 memoExtrato: memoPorLancamento.get(lancamento.id) ?? null,
+                temBaixaDeNota: comBaixaDeNota.has(lancamento.id),
               }))}
             />
           </div>

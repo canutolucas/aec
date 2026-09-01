@@ -16,10 +16,12 @@ import type { PaymentMethod, Transaction } from "@aec/db";
 import {
   canSettle,
   canUnsettle,
+  editLocks,
   fromDb,
   parseUserInput,
   startOfMonth,
   toDb,
+  type TransactionLock,
   type TransactionState,
 } from "@aec/domain";
 import { MoneyError } from "@aec/domain";
@@ -160,6 +162,18 @@ async function mesDestinoFechado(
     };
   }
   return null;
+}
+
+const LOCK_LABEL: Record<TransactionLock, string> = {
+  conciliado: "já foi conciliado com o extrato — desfaça a conciliação primeiro",
+  baixaDeNota: "já tem baixa de nota fiscal — desfaça a baixa em Recebimentos primeiro",
+  transferencia: "é uma perna de transferência — só o texto pode ser corrigido aqui",
+  mesFechado: "está em um mês fechado",
+};
+
+/** Mensagem de recusa quando o pedido de edição mexe num campo travado. */
+function motivoTravaCampo(nomeCampo: string, locks: readonly TransactionLock[]): string {
+  return `Não é possível alterar ${nomeCampo}: este lançamento ${LOCK_LABEL[locks[0]!]}.`;
 }
 
 interface LancamentoInput {
@@ -422,27 +436,110 @@ export async function desfazerBaixa(input: {
   return OK;
 }
 
+export interface EditarLancamentoInput {
+  companyId: string;
+  transactionId: string;
+  description: string;
+  /** Magnitude sempre positiva — sentido nunca muda numa edicao (ver R11). */
+  amount: string;
+  bookingDate: string;
+  competenceDate?: string;
+  bankAccountId: string;
+  categoryId?: string | null;
+  counterpartyId?: string | null;
+  costCenterId?: string | null;
+  documentNumber?: string | null;
+  paymentMethod?: PaymentMethod | null;
+  notes?: string | null;
+}
+
 /**
- * Atualiza a observacao livre do lancamento — o campo que existia desde a
- * primeira leva (`transactions.notes`) mas nenhuma tela jamais expunha.
- * Pedido direto da usuaria final: um lugar pra anotar "do que se refere"
- * aquele valor, pra nao depender so do historico que o banco mandou.
+ * Edita um lancamento ja existente — ate esta leva, so dava pra excluir e
+ * relancar pra corrigir qualquer coisa, o que era impossivel se o mes ja
+ * estivesse fechado. `editLocks` (@aec/domain) decide o que pode mudar: um
+ * lancamento conciliado ou com baixa de nota fiscal trava valor/data/conta
+ * (o que sustenta a prova de saldo e o rateio da nota) mas continua
+ * editavel em tudo o mais — descricao, categoria, cliente, centro de
+ * custo, documento, forma de pagamento, competencia, observacoes.
+ *
+ * Substitui `atualizarObservacoes`: duas Server Actions escrevendo a mesma
+ * coluna `notes` era a divergencia que este arquivo evita em todo lugar.
  */
-export async function atualizarObservacoes(
-  companyId: string,
-  transactionId: string,
-  notes: string,
-): Promise<ActionResult> {
+export async function editarLancamento(input: EditarLancamentoInput): Promise<ActionResult> {
   const supabase = await createServerSupabase();
 
-  const { error } = await supabase
+  const carregado = await carregarLancamento(supabase, input.companyId, input.transactionId);
+  if (!carregado.ok) return { ok: false, error: carregado.error };
+  const { row, state } = carregado;
+
+  if (state.periodLocked) {
+    return {
+      ok: false,
+      error: "O mes deste lancamento esta fechado. Reabra o fechamento para editar.",
+    };
+  }
+
+  let valor: number;
+  try {
+    valor = Math.abs(parseUserInput(input.amount));
+  } catch {
+    return { ok: false, error: `Valor invalido: ${input.amount}` };
+  }
+  if (valor === 0) return { ok: false, error: "O valor precisa ser diferente de zero." };
+
+  // O servidor recalcula as travas e recusa explicitamente se o pedido
+  // mexeu num campo travado — desabilitar o campo na tela e so
+  // conveniencia, a recusa de verdade e aqui (o RLS por baixo tambem
+  // barraria, mas so com a mensagem generica de RLS).
+  const locks = editLocks(state);
+  const valorAtual = Math.abs(fromDb(row.amount));
+  if (locks.amount.length > 0 && valor !== valorAtual) {
+    return { ok: false, error: motivoTravaCampo("o valor", locks.amount) };
+  }
+  if (locks.bookingDate.length > 0 && input.bookingDate !== row.booking_date) {
+    return { ok: false, error: motivoTravaCampo("a data", locks.bookingDate) };
+  }
+  if (locks.bankAccountId.length > 0 && input.bankAccountId !== row.bank_account_id) {
+    return { ok: false, error: motivoTravaCampo("a conta", locks.bankAccountId) };
+  }
+  const categoryIdNovo = input.categoryId || null;
+  if (locks.categoryId.length > 0 && categoryIdNovo !== row.category_id) {
+    return { ok: false, error: motivoTravaCampo("a categoria", locks.categoryId) };
+  }
+
+  // O sinal SEMPRE vem do que o lancamento ja tem, nunca do que a pessoa
+  // digitou — trocar o sentido nao e uma edicao, e excluir e relancar.
+  const valorComSinal = toDb(fromDb(row.amount) < 0 ? -valor : valor);
+
+  const { data, error } = await supabase
     .from("transactions")
-    .update({ notes: notes.trim() || null })
-    .eq("id", transactionId)
-    .eq("company_id", companyId);
+    .update({
+      description: input.description.trim(),
+      amount: valorComSinal,
+      booking_date: input.bookingDate,
+      competence_date: input.competenceDate || input.bookingDate,
+      bank_account_id: input.bankAccountId,
+      category_id: categoryIdNovo,
+      counterparty_id: input.counterpartyId || null,
+      cost_center_id: input.costCenterId || null,
+      document_number: input.documentNumber?.trim() || null,
+      payment_method: input.paymentMethod || null,
+      notes: input.notes?.trim() || null,
+    })
+    .eq("id", input.transactionId)
+    .eq("company_id", input.companyId)
+    .select("id");
 
   if (error) return { ok: false, error: traduzErro(error) };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: "Nada foi alterado. Confira se o mes esta aberto e se seu perfil permite lancar.",
+    };
+  }
 
-  revalidatePath(`/${companyId}/lancamentos`);
+  revalidatePath(`/${input.companyId}/lancamentos`);
+  revalidatePath(`/${input.companyId}/previstos`);
+  revalidatePath(`/${input.companyId}/painel`);
   return OK;
 }
