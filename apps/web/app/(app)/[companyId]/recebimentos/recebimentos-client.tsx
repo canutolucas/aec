@@ -24,15 +24,21 @@ import {
   type AutoApplyReceivablesSuggestion,
   settleInvoicesAction,
 } from "@/lib/db/faturamento";
+import { formatDateTime } from "@/lib/ui/format";
 
-import type { RecebimentosAccount } from "./page";
+import { BaixasDaNota } from "../faturamento/baixas-da-nota";
+import type { NotaComBaixas, RecebimentosAccount } from "./page";
 
 export function RecebimentosClient({
   companyId,
   accounts,
+  notasComBaixas,
+  podeDesfazer,
 }: {
   companyId: string;
   accounts: readonly RecebimentosAccount[];
+  notasComBaixas: readonly NotaComBaixas[];
+  podeDesfazer: boolean;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "loading" | "done">("idle");
@@ -41,6 +47,7 @@ export function RecebimentosClient({
   const [failed, setFailed] = useState<readonly AutoApplyReceivablesFailure[]>([]);
   const [feedback, setFeedback] = useState<{ text: string; tone: "warn" | "error" } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [verBaixasId, setVerBaixasId] = useState<string | null>(null);
 
   function runAutoApply() {
     startTransition(async () => {
@@ -194,6 +201,54 @@ export function RecebimentosClient({
           </div>
         </Card>
       )}
+
+      <Card>
+        <CardHeader title={`Baixas registradas (${notasComBaixas.length})`} />
+        {notasComBaixas.length === 0 ? (
+          <EmptyState
+            title="Nenhuma baixa ainda"
+            description="As notas quitadas por um crédito do extrato aparecem aqui, com opção de desfazer."
+          />
+        ) : (
+          <div className="divide-border divide-y">
+            {notasComBaixas.map((nota) => (
+              <div
+                key={nota.invoiceId}
+                className="flex items-center justify-between gap-3 p-4 text-sm"
+              >
+                <div>
+                  <p className="font-medium">Nota {nota.invoiceNumber}</p>
+                  <p className="text-muted-foreground text-xs">
+                    {nota.baixas.length} baixa(s) · última em {formatDateTime(nota.ultimaBaixaEm)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setVerBaixasId(nota.invoiceId)}
+                  className="text-primary text-xs underline-offset-2 hover:underline"
+                >
+                  Ver baixas
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {verBaixasId &&
+        (() => {
+          const nota = notasComBaixas.find((n) => n.invoiceId === verBaixasId);
+          return (
+            <BaixasDaNota
+              companyId={companyId}
+              invoiceNumber={nota?.invoiceNumber ?? ""}
+              baixas={nota?.baixas ?? []}
+              podeDesfazer={podeDesfazer}
+              open={verBaixasId !== null}
+              onOpenChange={(open) => !open && setVerBaixasId(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

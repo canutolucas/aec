@@ -29,6 +29,8 @@ import { useState, useTransition } from "react";
 import { cancelarNota, importarNotas } from "@/lib/db/faturamento";
 import { formatDate, formatTaxId, friendlyError, isInvoiceOverdue } from "@/lib/ui/format";
 
+import { type BaixaDaNota, BaixasDaNota } from "./baixas-da-nota";
+
 const STATUS_TONE: Record<InvoiceBalance["status"], "neutral" | "warn" | "success"> = {
   aberta: "neutral",
   recebida_parcial: "warn",
@@ -50,10 +52,12 @@ export function FaturamentoClient({
   companyId,
   podeImportar,
   invoices,
+  baixasPorNota,
 }: {
   companyId: string;
   podeImportar: boolean;
   invoices: readonly InvoiceBalance[];
+  baixasPorNota: ReadonlyMap<string, readonly BaixaDaNota[]>;
 }) {
   const router = useRouter();
   const [feedback, setFeedback] = useState<{
@@ -62,6 +66,7 @@ export function FaturamentoClient({
   } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [cancelandoId, setCancelandoId] = useState<string | null>(null);
+  const [verBaixasId, setVerBaixasId] = useState<string | null>(null);
 
   function cancelar(invoiceId: string) {
     startTransition(async () => {
@@ -239,8 +244,16 @@ export function FaturamentoClient({
                     </td>
                     {podeImportar && (
                       <td className="px-4 py-2 text-right">
-                        {invoice.status !== "cancelada" &&
-                          fromDb(invoice.received_amount) === 0 && (
+                        {fromDb(invoice.received_amount) > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setVerBaixasId(invoice.invoice_id)}
+                            className="text-primary text-xs underline-offset-2 hover:underline"
+                          >
+                            Ver baixas
+                          </button>
+                        ) : (
+                          invoice.status !== "cancelada" && (
                             <button
                               type="button"
                               onClick={() => setCancelandoId(invoice.invoice_id)}
@@ -248,7 +261,8 @@ export function FaturamentoClient({
                             >
                               Cancelar
                             </button>
-                          )}
+                          )
+                        )}
                       </td>
                     )}
                   </tr>
@@ -269,6 +283,17 @@ export function FaturamentoClient({
             if (cancelandoId) cancelar(cancelandoId);
           }}
         />
+
+        {verBaixasId && (
+          <BaixasDaNota
+            companyId={companyId}
+            invoiceNumber={invoices.find((i) => i.invoice_id === verBaixasId)?.number ?? ""}
+            baixas={baixasPorNota.get(verBaixasId) ?? []}
+            podeDesfazer={podeImportar}
+            open={verBaixasId !== null}
+            onOpenChange={(open) => !open && setVerBaixasId(null)}
+          />
+        )}
       </Card>
     </div>
   );

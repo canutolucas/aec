@@ -239,10 +239,32 @@ export async function excluirLancamento(
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
 
+  // invoice_settlements.transaction_id e `on delete cascade` — excluir um
+  // credito que ja quitou (parte de) uma nota apagaria a baixa junto, sem
+  // passar pelo recalculo de status que unsettle_invoice faz. A nota ficaria
+  // "recebida" com zero settlements, divergindo de v_invoice_balances.
+  // undo_transaction_from_line (RPC) ja guarda esse caso; esta Server Action
+  // precisa da mesma trava, ja que e um DELETE direto na tabela.
+  const { data: baixa, error: baixaError } = await supabase
+    .from("invoice_settlements")
+    .select("id")
+    .eq("transaction_id", transactionId)
+    .limit(1)
+    .maybeSingle();
+  if (baixaError) return { ok: false, error: traduzErro(baixaError) };
+  if (baixa) {
+    return {
+      ok: false,
+      error:
+        "Este lancamento ja tem baixa de nota fiscal — desfaca a baixa em Recebimentos antes de excluir.",
+    };
+  }
+
   const { data, error } = await supabase
     .from("transactions")
     .delete()
     .eq("id", transactionId)
+    .eq("company_id", companyId)
     .select("id");
 
   if (error) return { ok: false, error: traduzErro(error) };

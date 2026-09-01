@@ -179,6 +179,21 @@ export async function settleInvoicesAction(input: {
   return OK;
 }
 
+/**
+ * Desfaz uma baixa de recebimento — devolve a nota para aberta/parcial e o
+ * lancamento continua existindo. Ate esta leva, esta acao nao tinha
+ * NENHUMA tela: `cancelarNota` e a RPC `undo_transaction_from_line` mandam
+ * "desfaca a baixa em Recebimentos primeiro", uma instrucao impossivel de
+ * seguir sem ela.
+ *
+ * `unsettle_invoice` (SQL) ja levanta excecao clara pra mes fechado — o que
+ * falta aqui e a checagem de FRONTEIRA de empresa: a RPC recebe so o id da
+ * baixa, sem `company_id`, entao nada garante que a baixa pertence mesmo a
+ * `companyId` (alguem com acesso a duas empresas poderia, em tese, desfazer
+ * a baixa errada). A pre-checagem below e essa fronteira; a pos-checagem
+ * confere que a linha de fato sumiu — RLS negando o DELETE por qualquer
+ * outro motivo nao levanta excecao nenhuma, so afeta zero linhas.
+ */
 export async function unsettleInvoiceAction(
   companyId: string,
   settlementId: string,
@@ -189,11 +204,37 @@ export async function unsettleInvoiceAction(
   }
 
   const supabase = await createServerSupabase();
+
+  const { data: settlement, error: settlementError } = await supabase
+    .from("invoice_settlements")
+    .select("id")
+    .eq("id", settlementId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (settlementError) return { ok: false, error: settlementError.message };
+  if (!settlement) return { ok: false, error: "Baixa nao encontrada nesta empresa." };
+
   const { error } = await supabase.rpc("unsettle_invoice", { p_settlement_id: settlementId });
   if (error) return { ok: false, error: error.message };
 
+  const { data: aindaExiste, error: verificaError } = await supabase
+    .from("invoice_settlements")
+    .select("id")
+    .eq("id", settlementId)
+    .maybeSingle();
+  if (verificaError) return { ok: false, error: verificaError.message };
+  if (aindaExiste) {
+    return {
+      ok: false,
+      error: "Nada foi desfeito. Confira se o mes esta aberto e se seu perfil permite desfazer.",
+    };
+  }
+
   revalidatePath(`/${companyId}/faturamento`);
   revalidatePath(`/${companyId}/recebimentos`);
+  revalidatePath(`/${companyId}/lancamentos`);
+  revalidatePath(`/${companyId}/previstos`);
+  revalidatePath(`/${companyId}/painel`);
   return OK;
 }
 

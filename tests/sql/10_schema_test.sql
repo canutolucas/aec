@@ -1136,6 +1136,38 @@ begin
   );
 end $$;
 
+-- unsettle_invoice chamado por quem nao tem papel suficiente nao levanta
+-- excecao nenhuma -- so nao apaga nada. cliente_leitura consegue LER a
+-- baixa (a policy de select so exige ser membro), mas o DELETE por baixo
+-- exige 'assistente'; RLS nega o DELETE em silencio. E exatamente por isto
+-- que unsettleInvoiceAction (apps/web/lib/db/faturamento.ts) confere se a
+-- linha realmente sumiu depois de chamar a RPC, em vez de so olhar o erro.
+do $$
+declare v_settlement_id uuid; v_ainda_existe bigint;
+begin
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    $q$select public.settle_invoices('f2000000-0000-0000-0000-000000000002',
+      '[{"invoice_id": "f1000000-0000-0000-0000-000000000003", "amount": 300.00}]'::jsonb)$q$);
+
+  v_settlement_id := pg_temp.value_as('22222222-2222-2222-2222-222222222222',
+    $q$select id::text from public.invoice_settlements where invoice_id = 'f1000000-0000-0000-0000-000000000003'$q$)::uuid;
+
+  perform pg_temp.run_as('33333333-3333-3333-3333-333333333333',
+    format($q$select public.unsettle_invoice(%L)$q$, v_settlement_id));
+
+  v_ainda_existe := pg_temp.count_as('22222222-2222-2222-2222-222222222222',
+    format($q$select 1 from public.invoice_settlements where id = %L$q$, v_settlement_id));
+
+  perform pg_temp.assert(v_ainda_existe = 1,
+    'unsettle_invoice chamado por cliente_leitura nao apaga nada, sem levantar erro'
+  );
+
+  -- limpeza: desfaz de verdade com o assistente, pra nao deixar rastro no
+  -- resto do arquivo.
+  perform pg_temp.run_as('22222222-2222-2222-2222-222222222222',
+    format($q$select public.unsettle_invoice(%L)$q$, v_settlement_id));
+end $$;
+
 -- Trava de mes fechado: fecha maio e tenta dar baixa num credito de maio.
 do $$
 begin
