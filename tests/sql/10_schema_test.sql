@@ -1421,6 +1421,102 @@ do $$ begin perform pg_temp.expect_denied(
 reset role;
 
 \echo ''
+\echo '== Cadastros: editar e reativar =='
+-- editarCategoria/definirCategoriaAtiva/editarCentroCusto/
+-- definirCentroCustoAtivo/editarContraparte/definirContraparteAtiva
+-- (apps/web/lib/db/cadastros.ts) e definirContaAtiva (accounts.ts) sao UPDATE
+-- diretos: estes testes provam a mesma distincao de papel que
+-- categories_write/cost_centers_write/bank_accounts_write (contador) e
+-- counterparties_write (assistente) ja aplicam, e que ate esta leva nenhuma
+-- tela deixava reativar o que fora desativado por engano. Fixtures proprias
+-- (prefixo cad0...), para nao mexer no que as secoes anteriores ja usam.
+insert into public.categories (id, company_id, name, kind) values
+  ('cad00000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Categoria de teste', 'ambos');
+insert into public.cost_centers (id, company_id, name) values
+  ('cad00000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Centro de teste');
+insert into public.counterparties (id, company_id, name) values
+  ('cad00000-0000-0000-0000-000000000003', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Contraparte de teste');
+insert into public.bank_accounts (id, company_id, name, opening_balance, opening_balance_date) values
+  ('cad00000-0000-0000-0000-000000000004', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Conta de teste', 0, '2025-01-01');
+
+set role authenticated;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('11111111-1111-1111-1111-111111111111',
+    $q$update public.categories set is_active = false
+       where id = 'cad00000-0000-0000-0000-000000000001'$q$) = 1,
+  'owner desativa uma categoria'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('22222222-2222-2222-2222-222222222222',
+    $q$update public.categories set is_active = true
+       where id = 'cad00000-0000-0000-0000-000000000001'$q$) = 0,
+  'assistente nao consegue reativar categoria (categories_write exige contador)'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('11111111-1111-1111-1111-111111111111',
+    $q$update public.categories set is_active = true
+       where id = 'cad00000-0000-0000-0000-000000000001'$q$) = 1,
+  'owner reativa a categoria'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('22222222-2222-2222-2222-222222222222',
+    $q$update public.counterparties set is_active = false
+       where id = 'cad00000-0000-0000-0000-000000000003'$q$) = 1,
+  'assistente desativa uma contraparte'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('22222222-2222-2222-2222-222222222222',
+    $q$update public.counterparties set is_active = true
+       where id = 'cad00000-0000-0000-0000-000000000003'$q$) = 1,
+  'assistente tambem reativa contraparte — contrapartes exigem so assistente, nao contador'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('22222222-2222-2222-2222-222222222222',
+    $q$update public.bank_accounts set is_active = false
+       where id = 'cad00000-0000-0000-0000-000000000004'$q$) = 0,
+  'assistente nao consegue desativar conta bancaria (bank_accounts_write exige contador)'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('11111111-1111-1111-1111-111111111111',
+    $q$update public.bank_accounts set is_active = false
+       where id = 'cad00000-0000-0000-0000-000000000004'$q$) = 1,
+  'owner desativa a conta bancaria'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('11111111-1111-1111-1111-111111111111',
+    $q$update public.bank_accounts set is_active = true
+       where id = 'cad00000-0000-0000-0000-000000000004'$q$) = 1,
+  'owner reativa a conta bancaria'
+); end $$;
+
+-- editarCategoria (Server Action) conta lancamentos no sentido oposto antes
+-- de restringir o kind — o trigger de schema so valida na propria
+-- transaction, nunca quando a categoria muda por baixo dela. Aqui provamos
+-- so o schema: nada impede o UPDATE da categoria em si mesmo restringindo
+-- para um sentido ja usado no oposto, o que confirma que a trava e mesmo
+-- responsabilidade da Server Action, nao do banco.
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('11111111-1111-1111-1111-111111111111',
+    $q$update public.categories set kind = 'entrada'
+       where id = 'c1c1c1c1-0000-0000-0000-000000000002'$q$) = 1,
+  'o schema sozinho permite restringir o kind de uma categoria ja usada no sentido oposto — a Server Action e quem tem de recusar'
+); end $$;
+-- Desfaz: c1c1c1c1-...0002 ('Aluguel') e usada por outras secoes como saida.
+do $$ begin perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+  $q$update public.categories set kind = 'saida'
+     where id = 'c1c1c1c1-0000-0000-0000-000000000002'$q$); end $$;
+
+reset role;
+
+\echo ''
 \echo '== Criacao de empresa =='
 set role authenticated;
 do $$

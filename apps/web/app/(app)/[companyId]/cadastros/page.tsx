@@ -16,10 +16,14 @@ export const metadata = { title: "Cadastros — Controle Bancario" };
 
 export default async function CadastrosPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ companyId: string }>;
+  searchParams: Promise<{ inativos?: string }>;
 }) {
   const { companyId } = await params;
+  const { inativos } = await searchParams;
+  const mostrarInativos = inativos === "1";
   const session = await requireAdvancedAccess(companyId);
   const supabase = await createServerSupabase();
 
@@ -28,9 +32,9 @@ export default async function CadastrosPage({
   // filtering or sort order for either surface, not two copies that can
   // silently drift apart.
   const [categories, costCenters, counterparties, matchingRules] = await Promise.all([
-    listCategories(supabase, companyId),
-    listCostCenters(supabase, companyId),
-    listCounterparties(supabase, companyId),
+    listCategories(supabase, companyId, { includeInactive: mostrarInativos }),
+    listCostCenters(supabase, companyId, { includeInactive: mostrarInativos }),
+    listCounterparties(supabase, companyId, { includeInactive: mostrarInativos }),
     listMatchingRules(supabase, companyId),
   ]);
 
@@ -44,6 +48,7 @@ export default async function CadastrosPage({
         costCenters={costCenters}
         counterparties={counterparties}
         matchingRules={matchingRules}
+        mostrarInativos={mostrarInativos}
         // Categorias e centros de custo (plano de contas) exigem contador;
         // contrapartes e regras de categorizacao ja aceitam assistente — a
         // mesma distincao que as policies de RLS fazem no banco.

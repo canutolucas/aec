@@ -5,12 +5,10 @@ import { unwrap } from "./helpers";
 export async function listCounterparties(
   client: DbClient,
   companyId: string,
+  options: { includeInactive?: boolean } = {},
 ): Promise<Counterparty[]> {
-  const result = await client
-    .from("counterparties")
-    .select("*")
-    .eq("company_id", companyId)
-    .eq("is_active", true)
-    .order("name");
+  let query = client.from("counterparties").select("*").eq("company_id", companyId);
+  if (!options.includeInactive) query = query.eq("is_active", true);
+  const result = await query.order("name");
   return unwrap(result);
 }

@@ -2,8 +2,10 @@
 
 import { ACCOUNT_KIND_LABELS, type AccountBalance, type BankAccount } from "@aec/db";
 import { fromDb, sum } from "@aec/domain";
-import { Fragment, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Fragment, useState, useTransition } from "react";
 
+import { definirContaAtiva } from "@/lib/db/accounts";
 import {
   Alert,
   Badge,
@@ -11,6 +13,7 @@ import {
   Button,
   Card,
   CardHeader,
+  ConfirmDialog,
   EmptyState,
   Money,
 } from "@/lib/ui/components";
@@ -28,13 +31,43 @@ export function ContasClient({
   podeEditar: boolean;
   contas: readonly { saldo: AccountBalance; bruta: BankAccount }[];
 }) {
+  const router = useRouter();
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [alternandoConta, setAlternandoConta] = useState<{
+    id: string;
+    name: string;
+    ativa: boolean;
+  } | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [erro, setErro] = useState<string | null>(null);
 
   const totalAtual = sum(contas.map((c) => fromDb(c.saldo.current_balance)));
   const totalProjetado = sum(contas.map((c) => fromDb(c.saldo.projected_balance)));
 
+  function alternarAtiva() {
+    if (!alternandoConta) return;
+    return new Promise<void>((resolve) => {
+      startTransition(async () => {
+        const resultado = await definirContaAtiva(
+          companyId,
+          alternandoConta.id,
+          !alternandoConta.ativa,
+        );
+        if (!resultado.ok) {
+          setErro(resultado.error ?? "Nao foi possivel salvar.");
+        } else {
+          setErro(null);
+          router.refresh();
+        }
+        resolve();
+      });
+    });
+  }
+
   return (
     <div className="space-y-6">
+      {erro && <Alert tone="error">{erro}</Alert>}
+
       <Card>
         <CardHeader title="Contas bancarias" />
 
@@ -101,13 +134,32 @@ export function ContasClient({
                         </td>
                         {podeEditar && (
                           <td className="px-4 py-2 text-right">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setEditandoId(emEdicao ? null : saldo.bank_account_id)}
-                            >
-                              {emEdicao ? "Fechar" : "Editar"}
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              {saldo.is_active && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    setEditandoId(emEdicao ? null : saldo.bank_account_id)
+                                  }
+                                >
+                                  {emEdicao ? "Fechar" : "Editar"}
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setAlternandoConta({
+                                    id: saldo.bank_account_id,
+                                    name: saldo.name,
+                                    ativa: saldo.is_active,
+                                  })
+                                }
+                              >
+                                {saldo.is_active ? "Desativar" : "Reativar"}
+                              </Button>
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -157,6 +209,25 @@ export function ContasClient({
           contador ou responsável.
         </Alert>
       )}
+
+      <ConfirmDialog
+        open={alternandoConta !== null}
+        onOpenChange={(open) => !open && setAlternandoConta(null)}
+        title={
+          alternandoConta?.ativa
+            ? `Desativar "${alternandoConta.name}"?`
+            : `Reativar "${alternandoConta?.name}"?`
+        }
+        description={
+          alternandoConta?.ativa
+            ? "Desativar tira a conta do formulário de lançamento e da importação de extrato. O saldo dela continua entrando no consolidado — para tirar do saldo, o caminho é outro."
+            : "A conta volta a aparecer no formulário de lançamento e na importação de extrato."
+        }
+        confirmLabel={alternandoConta?.ativa ? "Desativar" : "Reativar"}
+        tone={alternandoConta?.ativa ? "danger" : "default"}
+        disabled={pending}
+        onConfirm={alternarAtiva}
+      />
     </div>
   );
 }

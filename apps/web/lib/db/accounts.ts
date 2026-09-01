@@ -167,3 +167,40 @@ export async function editarConta(input: EditarContaInput): Promise<ActionResult
   revalidatePath(`/${input.companyId}/lancamentos`);
   return OK;
 }
+
+/**
+ * Ativar/desativar e separada de editarConta de proposito: um toggle de linha
+ * nao deve arrastar o resto do cadastro (saldo inicial, nome) junto — e o
+ * mesmo raciocinio que ja levou definirCategoriaAtiva/definirContaparteAtiva
+ * a ficarem separadas de editarCategoria/editarContraparte em cadastros.ts.
+ *
+ * Desativar so tira a conta do formulario de lancamento e da importacao de
+ * extrato — o saldo dela continua entrando no consolidado (contas/painel
+ * somam todas, ativas ou nao). A tela precisa deixar isso explicito no
+ * confirm, nao so aqui no comentario.
+ */
+export async function definirContaAtiva(
+  companyId: string,
+  id: string,
+  ativa: boolean,
+): Promise<ActionResult> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("bank_accounts")
+    .update({ is_active: ativa })
+    .eq("id", id)
+    .eq("company_id", companyId)
+    .select("id");
+  if (error) return { ok: false, error: traduzErro(error) };
+  if (data.length === 0) {
+    return {
+      ok: false,
+      error: `Nao foi possivel ${ativa ? "reativar" : "desativar"}: conta nao encontrada.`,
+    };
+  }
+
+  revalidatePath(`/${companyId}/contas`);
+  revalidatePath(`/${companyId}/painel`);
+  revalidatePath(`/${companyId}/lancamentos`);
+  return OK;
+}
