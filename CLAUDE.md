@@ -600,6 +600,133 @@ consultava a trilha — nem quem já tinha permissão pra ler tinha onde ver.
   fechamento (é só uma tela de consulta), e nenhuma outra tela do sistema
   ainda tinha filtrado por timestamptz para haver um padrão exato a seguir.
 
+### A leva do dia a dia — corrigir, dar baixa direito, previstos (madrugada de 01/09/2026)
+
+Depois da Reforma "A Esteira" e da trilha de auditoria, uma varredura
+completa desta sessão (schema × código, domínio × UI, telas × fluxo do
+contador) expôs que o app **cria** dado financeiro muito bem e **corrige**
+muito mal: não existia edição de lançamento, a baixa de previsto não aceitava
+a data nem o valor que caíram de verdade, cadastro desativado por engano
+sumia para sempre, e o previsto vencido de um mês desaparecia ao olhar outro
+mês (a única tela de previstos era `/lancamentos`, filtrada por mês). Três
+desses eram becos sem saída literais: o sistema mandava a pessoa fazer algo
+que não existia em tela nenhuma (`atualizarObservacoes` sem edição de mais
+nada; `cancelarNota`/`undo_transaction_from_line` mandando "desfaça a baixa
+em Recebimentos" sem essa ação existir). Lucas escolheu os itens do dia a
+dia da usuária final entre 15 candidatos levantados: editar lançamento
+existente, desfazer baixa de nota fiscal, dar baixa com data/valor reais,
+editar/reativar cadastros + ativar/desativar conta, e uma tela de previstos
+sem filtro de mês. Decisão de trava tomada com ele: lançamento conciliado ou
+com baixa de nota trava só **valor, data e conta** (os três que sustentam a
+prova de saldo e o rateio da nota) — categoria, descrição, cliente, centro
+de custo, documento e observações continuam editáveis sempre.
+
+Três bugs vivos fechados nesta leva (nomeados A1/A2/A3 no diagnóstico):
+
+- **A1 — `settle_transaction` mentia quando o RLS recusava.** Terminava com
+  `update ... returning * into v_row` sem `if not found`; em mês fechado a
+  policy recusa em silêncio (`transactions_update` usa `using` sobre a data
+  ANTIGA do lançamento), `v_row` vira nulo, a função "tinha sucesso" sem
+  nada ter mudado. Fechado em duas camadas: a Server Action (`darBaixa`)
+  passou a conferir `data?.id`, e a migration desta leva (abaixo) deu à
+  própria função o `if not found` que faltava.
+- **A2 — `atualizarObservacoes`/`unsettleInvoiceAction` tinham o mesmo
+  buraco.** Nenhuma checava linhas afetadas. `atualizarObservacoes` foi
+  fundida em `editarLancamento` (abaixo); `unsettleInvoiceAction` ganhou
+  pré-checagem por id + pós-checagem relendo a linha.
+- **A3 — `excluirLancamento` apagava baixa de nota por cascata, sem
+  recalcular a nota.** `invoice_settlements.transaction_id` é
+  `on delete cascade`; `undo_transaction_from_line` já guardava esse caso
+  com `raise exception`, `excluirLancamento` não guardava nada. Agora recusa
+  com a mesma frase quando existe `invoice_settlements` para o lançamento.
+
+**`packages/domain/src/transaction-edits.ts`** (novo): `editLocks()` e
+`canSettle()`/`canUnsettle()`, puras — a mesma função decide o que a tela
+desabilita (com motivo explicado) e o que o servidor recusa
+(`editarLancamento`), o mesmo princípio que `hasRole`/RLS já aplicam em
+outro lugar deste repo. **`packages/domain/src/planned.ts`**:
+`splitPlanned()` — bucket de previstos em vencido/a vencer × entrada/saída,
+mesmo corte de data que `/painel` já usava (`bookingDate === hoje` conta
+como "a vencer").
+
+**Baixa de previsto com data e valor reais**: `darBaixa` deixou de ser só
+"marcar como realizado" — aceita a data em que o dinheiro andou e o valor
+que de fato caiu, **sempre derivando o sinal do lado do servidor** a partir
+do previsto original (nunca do que a pessoa digitou — um valor positivo
+digitado num previsto de saída não pode virar receita e inverter o
+resultado do mês). `desfazerBaixa` (nova) volta um realizado para previsto,
+para desfazer um erro de baixa ou "lancei como realizado e o dinheiro ainda
+não caiu" — trava por `canUnsettle()` (conciliado, baixa de nota,
+transferência e mês fechado bloqueiam, com mensagem por motivo).
+`lancamentos/baixa-dialog.tsx` (novo) hospeda os dois modos, com diff ao
+vivo ("Previsto era R$ 1.000,00 em 05/03 — está registrando R$ 1.012,30 em
+08/03").
+
+**Editar lançamento existente** (nunca existiu antes desta leva):
+`editarLancamento` (`apps/web/lib/db/transactions.ts`) recalcula as travas
+no servidor com `editLocks()` e recusa explicitamente se o pedido mexe num
+campo travado — desabilitar na tela é conveniência, a recusa real é aqui.
+Sentido (sinal) e situação (previsto/realizado) nunca são editáveis por
+este caminho — trocar sinal é excluir e relançar; situação tem o caminho
+próprio de `darBaixa`/`desfazerBaixa`. `lancamentos/editar-lancamento-form.tsx`
+(novo) explica cada campo travado numa frase ("Valor e data vieram do
+extrato do banco. Para corrigir, desfaça a conciliação primeiro").
+
+**`/previstos`** (nova rota, nova sub-aba em Movimentos, entre Lançamentos e
+Conciliação): a diferença central é **não ter filtro de mês** — consulta
+todo `status = 'previsto'` ordenado por vencimento, teto de 500 linhas com
+o `Alert` de teto visível que a Fase 5 já padronizou. Duas abas (A pagar/A
+receber) via `splitPlanned()`, cada uma com Vencidos (destacado, "há N
+dias") e A vencer. Reusa `AcoesLancamento`/`DetalheLancamento` de
+`/lancamentos` sem duplicar lógica — é só uma fatia diferente do mesmo
+dado. `/painel` teve seus links de "previsto vencido" redirecionados para
+cá — antes apontavam para `/lancamentos` filtrado por mês, onde o vencido
+de outro mês não aparecia.
+
+**Baixas de nota fiscal visíveis e reversíveis**: `cancelarNota` e
+`undo_transaction_from_line` sempre mandaram "desfaça a baixa em
+Recebimentos primeiro", e essa ação não existia em tela nenhuma até esta
+leva. `faturamento/baixas-da-nota.tsx` (novo, `BaixasDaNota`) lista cada
+baixa de uma nota (valor, data, lançamento de origem) com "Desfazer" atrás
+de `ConfirmDialog`; entra nos dois lugares que a mensagem menciona —
+`/faturamento` (onde a pessoa esbarra no bloqueio de "Cancelar" quando já
+tem recebimento — vira "Ver baixas") e `/recebimentos` (card "Baixas
+registradas", só leitura + desfazer, sem tocar no clique explícito que
+`autoApplyReceivables` já exige desde a Fase 1e).
+
+**Editar e reativar cadastros, ativar/desativar conta**: até esta leva,
+"desativar" categoria/centro de custo/contraparte/conta era porta só de
+ida — sem edição, sem reativar, sem ver o que estava inativo sem consultar
+o banco. As três `desativar*()` também não checavam linhas afetadas (mesmo
+buraco do A2: um assistente clicando "Desativar" numa categoria via
+sucesso com nada escrito, porque `categories_write` exige contador).
+Viraram pares `editar*`/`definir*Ativa(o)` em `apps/web/lib/db/cadastros.ts`
+e `definirContaAtiva` em `accounts.ts` (separada de `editarConta` de
+propósito — um toggle de linha não deve arrastar saldo inicial junto).
+`editarCategoria` conta lançamentos no sentido oposto antes de restringir o
+`kind` de "ambos" para "entrada"/"saída" (o trigger de schema só valida a
+própria transaction, nunca a categoria mudando por baixo dela).
+`cadastros-client.tsx` ganhou `?inativos=1` (sobrevive a refresh, como
+`?perfil=`/`?mes=`), edição inline e "Reativar"; `contas-client.tsx` ganhou
+Desativar/Reativar com aviso explícito no confirm — desativar tira a conta
+do formulário de lançamento e da importação, **mas o saldo dela continua
+entrando no consolidado**.
+
+**Migration desta leva (ainda não aplicada em produção — ver "Pendências
+reais")**: `20250101002200_settle_transaction_guards.sql`, um
+`create or replace` de `settle_transaction` que fecha o A1 (`if not found`
+depois do UPDATE) e um risco maior nunca travado: a função nunca validava o
+**sinal** de `p_amount` — um valor positivo informado para a baixa de um
+previsto de saída (ou negativo para um de entrada) inverte o lançamento e o
+resultado do mês inteiro, sem aviso. O app já deriva o sinal do lado do
+servidor e nunca confia no que a pessoa digitou, mas a função SQL é a
+autoridade real — nada impedia uma chamada direta à RPC com o sinal
+errado. Não muda a assinatura da função (confirmado regenerando
+`database.types.ts` — diff vazio depois do `prettier --write`), não precisa
+tocar nenhum call site. `tests/sql/10_schema_test.sql` tem os dois casos:
+mês fechado agora recusa com mensagem clara em vez de devolver linha nula,
+e um valor de sinal errado é recusado.
+
 ## Fases do projeto — o que falta
 
 Todas as fases planejadas foram concluídas ou encerradas por decisão.
@@ -651,7 +778,10 @@ completa (Fases 1a–1e, 2a, 2b, 3, 4, 5 — ver seção acima).
   `20250101001800_account_profiles.sql` (Fase 2a),
   `20250101002000_seed_categories_on_create_company.sql` (Fase 4) e
   `20250101002100_audit_triggers_restantes.sql` (trilha de auditoria) foram
-  aplicadas em 2026-08-29. Nenhuma migration pendente no momento.
+  aplicadas em 2026-08-29. **Pendente agora:**
+  `20250101002200_settle_transaction_guards.sql` (leva do dia a dia,
+  01/09/2026 — ver seção acima; SQL completo na mensagem que entregou esta
+  leva).
 - O parser de NFS-e foi validado contra UM município real (Salvador/BA,
   ABRASF v1). Um XML de outra prefeitura pode expor variações de layout ainda
   não cobertas pelos sinônimos de tag em `nfse.ts`.

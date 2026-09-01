@@ -1332,26 +1332,40 @@ begin
   perform pg_temp.assert(v_direction = 'saida', 'valor negativo na baixa mantem a direcao saida');
 end $$;
 
--- BUG CONHECIDO, fechado pela migration de guardas desta leva (ainda nao
--- aplicada neste ponto do arquivo): settle_transaction nao tem `if not
--- found` apos o UPDATE. RLS recusando em mes fechado nao levanta excecao —
--- o UPDATE so afeta zero linhas, e a funcao devolve uma linha com todo
--- campo nulo, sem erro nenhum. E exatamente por isto que a Server Action
--- (apps/web/lib/db/transactions.ts) confere `data?.id`, nao so `error`.
-do $$
-declare v_new_id uuid;
-begin
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', '11111111-1111-1111-1111-111111111111')::text, true);
+-- Endurecido pela migration 20250101002200_settle_transaction_guards.sql
+-- (aplicada mais cedo neste mesmo arquivo, junto com as demais): antes dela
+-- a RLS recusando em mes fechado nao levantava excecao — o UPDATE so
+-- afetava zero linhas, e a funcao devolvia uma linha com todo campo nulo,
+-- sem erro nenhum (por isso `apps/web/lib/db/transactions.ts` confere
+-- `data?.id`, nao so `error` — defesa que continua valendo mesmo com a
+-- funcao corrigida). Agora a propria funcao recusa com mensagem clara.
+do $$ begin perform pg_temp.expect_denied(
+  '11111111-1111-1111-1111-111111111111',
+  $q$select public.settle_transaction(
+     'f1f1f1f1-0000-0000-0000-000000000003', '2025-07-05', -300.00)$q$,
+  'settle_transaction em mes fechado recusa com mensagem clara, nao devolve linha nula em silencio'
+); end $$;
 
-  select (r).id into v_new_id
-  from (select public.settle_transaction(
-    'f1f1f1f1-0000-0000-0000-000000000003', '2025-07-05', -300.00) as r) s;
+-- R11: o sinal do valor da baixa precisa manter o sentido do previsto. O
+-- app ja deriva o sinal do lado do servidor (darBaixa nunca confia no que a
+-- pessoa digitou), mas a funcao SQL e quem tem de recusar de verdade —
+-- prova que a trava existe mesmo se um chamador futuro nao passar pelo app.
+-- f1f1f1f1-...0001 ja virou 'realizado' no teste anterior; fixture propria
+-- (previsto de saida), so para este teste.
+do $$ begin perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
+  $q$insert into public.transactions
+       (id, company_id, bank_account_id, booking_date, competence_date, amount, status, description)
+     values
+       ('f1f1f1f1-0000-0000-0000-000000000006', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        'a1a1a1a1-0000-0000-0000-000000000001', '2025-06-15', '2025-06-15', -50.00, 'previsto',
+        'Previsto de saida para teste de sinal')$q$); end $$;
 
-  perform pg_temp.assert(v_new_id is null,
-    'settle_transaction em mes fechado devolve linha nula, sem erro (por isso a Server Action confere o retorno)'
-  );
-end $$;
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$select public.settle_transaction(
+     'f1f1f1f1-0000-0000-0000-000000000006', null, 50.00)$q$,
+  'settle_transaction recusa valor positivo para a baixa de um previsto de saida'
+); end $$;
 
 -- Voltar para previsto (o UPDATE que desfazerBaixa faz direto, sem RPC):
 -- mes aberto deixa, mes fechado e papel insuficiente nao.
