@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerSupabase } from "@/lib/db/supabase";
@@ -46,6 +47,15 @@ export default async function LoginPage({
         </div>
       )}
 
+      {params.erro === "link-invalido" && (
+        <div className="mt-4">
+          <Alert tone="error">
+            Esse link expirou ou já foi usado. Peça um novo em &quot;Esqueci minha senha&quot; ou
+            entre normalmente.
+          </Alert>
+        </div>
+      )}
+
       <form action={entrar} className="mt-6 space-y-4">
         <input type="hidden" name="destino" value={params.destino ?? "/"} />
 
@@ -61,6 +71,18 @@ export default async function LoginPage({
           Entrar
         </Button>
       </form>
+
+      <div className="text-muted-foreground mt-4 flex justify-between text-sm">
+        <Link href={routes.signUp} className="text-primary underline-offset-2 hover:underline">
+          Criar conta
+        </Link>
+        <Link
+          href={routes.forgotPassword}
+          className="text-primary underline-offset-2 hover:underline"
+        >
+          Esqueci minha senha
+        </Link>
+      </div>
     </main>
   );
 }

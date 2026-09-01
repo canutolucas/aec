@@ -12,7 +12,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_ROUTES = ["/login", "/auth"];
+// /nova-senha fica de fora de proposito: so faz sentido com uma sessao de
+// recuperacao ja trocada em /auth/callback, entao o redirecionamento normal
+// para /login (sem sessao) e o comportamento certo pra quem chega la direto.
+const PUBLIC_ROUTES = ["/login", "/cadastrar", "/esqueci-senha", "/auth"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -50,7 +53,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(login);
   }
 
-  if (data.user && path === "/login") {
+  if (data.user && (path === "/login" || path === "/cadastrar")) {
     const home = request.nextUrl.clone();
     home.pathname = "/";
     home.search = "";

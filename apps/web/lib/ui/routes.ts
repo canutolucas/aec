@@ -17,6 +17,9 @@ import type { Route } from "next";
 export const routes = {
   root: "/" as Route,
   login: "/login" as Route,
+  signUp: "/cadastrar" as Route,
+  forgotPassword: "/esqueci-senha" as Route,
+  resetPassword: "/nova-senha" as Route,
   companies: "/empresas" as Route,
 
   today: (companyId: string) => `/${companyId}/hoje` as Route,
