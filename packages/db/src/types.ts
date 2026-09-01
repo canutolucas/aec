@@ -47,6 +47,7 @@ export type StatementSource = Enums["statement_source"];
 export type StatementLineStatus = Enums["statement_line_status"];
 export type PaymentMethod = Enums["payment_method"];
 export type InvoiceStatus = Enums["invoice_status"];
+export type RecurrenceFrequency = Enums["recurrence_frequency"];
 
 export type Company = Tables["companies"]["Row"];
 export type Membership = Tables["memberships"]["Row"];
@@ -61,6 +62,8 @@ export type StatementLine = Tables["statement_lines"]["Row"];
 export type MatchingRule = Tables["matching_rules"]["Row"];
 export type Invoice = Tables["invoices"]["Row"];
 export type InvoiceSettlement = Tables["invoice_settlements"]["Row"];
+/** Um lancamento fixo (aluguel, folha, honorarios) que gera previstos sozinho. */
+export type Recurrence = Tables["recurrences"]["Row"];
 /** Uma lente gerencial agrupando contas — não confundir com `Profile` (usuário). */
 export type AccountProfile = Tables["account_profiles"]["Row"];
 export type AccountProfileAccount = Tables["account_profile_accounts"]["Row"];
@@ -176,6 +179,13 @@ export const CATEGORY_KIND_LABELS: Record<CategoryKind, string> = {
   entrada: "Entrada",
   saida: "Saida",
   ambos: "Entrada ou saida",
+};
+
+export const RECURRENCE_FREQUENCY_LABELS: Record<RecurrenceFrequency, string> = {
+  semanal: "Semanal",
+  quinzenal: "Quinzenal",
+  mensal: "Mensal",
+  anual: "Anual",
 };
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {

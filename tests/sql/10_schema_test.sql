@@ -1531,6 +1531,54 @@ do $$ begin perform pg_temp.run_as('11111111-1111-1111-1111-111111111111',
 reset role;
 
 \echo ''
+\echo '== Recorrencias (lancamentos fixos) =='
+-- recurrences_write (20250101000700_rls.sql) exige contador — o mesmo
+-- padrao de bank_accounts/categories/cost_centers, ja em producao desde a
+-- primeira leva de schema, so nunca ligado a uma tela ate esta leva.
+-- Fixture hex "eccc..." (nao pode comecar com letra fora de a-f).
+set role authenticated;
+
+do $$ begin perform pg_temp.expect_denied(
+  '22222222-2222-2222-2222-222222222222',
+  $q$insert into public.recurrences (company_id, bank_account_id, description, amount, frequency, start_date)
+     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1a1a1a1-0000-0000-0000-000000000001',
+             'Aluguel', -1500.00, 'mensal', '2025-01-05')$q$,
+  'assistente nao consegue criar recorrencia (recurrences_write exige contador)'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('11111111-1111-1111-1111-111111111111',
+    $q$insert into public.recurrences
+         (id, company_id, bank_account_id, description, amount, frequency, day_of_month, start_date)
+       values ('eccc0000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+               'a1a1a1a1-0000-0000-0000-000000000001', 'Aluguel', -1500.00, 'mensal', 5, '2025-01-05')$q$) = 1,
+  'owner cria recorrencia'
+); end $$;
+
+-- gerarPrevistos (apps/web/lib/db/recorrencias.ts) faz este mesmo INSERT na
+-- tabela transactions — nao ha RPC propria. Confere que o previsto nasce de
+-- fato vinculado (recurrence_id preenchido), o que a tela usa pra nao
+-- duplicar geracao.
+do $$ begin perform pg_temp.assert(
+  pg_temp.affected_as('22222222-2222-2222-2222-222222222222',
+    $q$insert into public.transactions
+         (company_id, bank_account_id, booking_date, competence_date, amount, status, description, recurrence_id)
+       values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1a1a1a1-0000-0000-0000-000000000001',
+               '2025-08-05', '2025-08-05', -1500.00, 'previsto', 'Aluguel gerado',
+               'eccc0000-0000-0000-0000-000000000001')$q$) = 1,
+  'assistente lanca um previsto vinculado a recorrencia (mesmo INSERT que gerarPrevistos faz)'
+); end $$;
+
+do $$ begin perform pg_temp.assert(
+  pg_temp.value_as('11111111-1111-1111-1111-111111111111',
+    $q$select recurrence_id::text from public.transactions where description = 'Aluguel gerado'$q$)
+    = 'eccc0000-0000-0000-0000-000000000001',
+  'o previsto gerado fica vinculado a recorrencia que o originou'
+); end $$;
+
+reset role;
+
+\echo ''
 \echo '== Criacao de empresa =='
 set role authenticated;
 do $$

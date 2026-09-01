@@ -83,6 +83,12 @@ export const NAV_GROUPS = {
       { key: "contas", label: "Contas", href: routes.accounts },
       { key: "cadastros", label: "Cadastros", href: routes.registries, hideInSimpleMode: true },
       { key: "regras", label: "Regras", href: routes.rules },
+      {
+        key: "recorrencias",
+        label: "Recorrências",
+        href: routes.recurrences,
+        hideInSimpleMode: true,
+      },
       { key: "equipe", label: "Equipe", href: routes.team, minRole: "owner" as const },
     ],
   },

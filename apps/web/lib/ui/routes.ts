@@ -36,6 +36,7 @@ export const routes = {
   planned: (companyId: string) => `/${companyId}/previstos` as Route,
   closings: (companyId: string) => `/${companyId}/fechamentos` as Route,
   rules: (companyId: string) => `/${companyId}/regras` as Route,
+  recurrences: (companyId: string) => `/${companyId}/recorrencias` as Route,
   invoices: (companyId: string) => `/${companyId}/faturamento` as Route,
   receivables: (companyId: string) => `/${companyId}/recebimentos` as Route,
   transactions: (companyId: string, filters?: { month?: string; account?: string }) => {

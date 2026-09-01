@@ -23,16 +23,17 @@ describe("topLevelNav", () => {
 });
 
 describe("visibleItems — Ajustes", () => {
-  it("modo avancado + owner ve as 4 abas", () => {
+  it("modo avancado + owner ve as 5 abas", () => {
     expect(visibleItems(NAV_GROUPS.ajustes, "owner", false).map((i) => i.key)).toEqual([
       "contas",
       "cadastros",
       "regras",
+      "recorrencias",
       "equipe",
     ]);
   });
 
-  it("modo simples esconde Cadastros mesmo pra owner", () => {
+  it("modo simples esconde Cadastros e Recorrências mesmo pra owner", () => {
     expect(visibleItems(NAV_GROUPS.ajustes, "owner", true).map((i) => i.key)).toEqual([
       "contas",
       "regras",
@@ -45,6 +46,7 @@ describe("visibleItems — Ajustes", () => {
       "contas",
       "cadastros",
       "regras",
+      "recorrencias",
     ]);
     expect(visibleItems(NAV_GROUPS.ajustes, "assistente", true).map((i) => i.key)).toEqual([
       "contas",
@@ -52,11 +54,12 @@ describe("visibleItems — Ajustes", () => {
     ]);
   });
 
-  it("cliente_leitura nunca ve Equipe, e Cadastros so some no modo simples (a aba e so leitura pra ele, RLS decide o resto)", () => {
+  it("cliente_leitura nunca ve Equipe, e Cadastros/Recorrências so somem no modo simples (as abas sao so leitura pra ele, RLS decide o resto)", () => {
     expect(visibleItems(NAV_GROUPS.ajustes, "cliente_leitura", false).map((i) => i.key)).toEqual([
       "contas",
       "cadastros",
       "regras",
+      "recorrencias",
     ]);
     expect(visibleItems(NAV_GROUPS.ajustes, "cliente_leitura", true).map((i) => i.key)).toEqual([
       "contas",

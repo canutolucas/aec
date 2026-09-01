@@ -13,6 +13,7 @@ export * from "./queries/companies";
 export * from "./queries/cost-centers";
 export * from "./queries/counterparties";
 export * from "./queries/matching-rules";
+export * from "./queries/recurrences";
 export * from "./queries/statement-lines";
 export * from "./queries/transactions";
 export { queryKeys } from "./query-keys";

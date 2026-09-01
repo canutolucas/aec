@@ -8,11 +8,12 @@ import {
   type Transaction,
 } from "@aec/db";
 import { todayInBrazil } from "@aec/domain";
-import { Alert, PageHeader } from "@aec/ui";
+import { Alert, LinkButton, PageHeader } from "@aec/ui";
 
 import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 import { PERFIL_PARAM, resolvePerfilSelecao } from "@/lib/ui/account-profiles";
+import { routes } from "@/lib/ui/routes";
 
 import type { LancamentoRow } from "../lancamentos/lancamentos-table";
 import { SubNav } from "../sub-nav";
@@ -98,6 +99,13 @@ export default async function PrevistosPage({
       <PageHeader
         title="A pagar e a receber"
         description="Todos os previstos em aberto, de qualquer mes — vencidos e a vencer."
+        action={
+          hasRole(session.role, "contador") && (
+            <LinkButton href={routes.recurrences(companyId)} variant="ghost" size="sm">
+              Lançamentos fixos (recorrências)
+            </LinkButton>
+          )
+        }
       />
 
       {noTeto && (
