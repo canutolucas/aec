@@ -191,7 +191,13 @@ export default async function PainelPage({
       {vencidos.length > 0 && (
         <Alert tone="warn" title={`${vencidos.length} previsto(s) vencido(s) e em aberto`}>
           Somam <Money cents={sum(vencidos.map((v) => fromDb(v.amount)))} />. Continuam contando na
-          projecao — se ja foram pagos, de baixa para o caixa projetado ficar correto.
+          projecao — se ja foram pagos, de baixa para o caixa projetado ficar correto.{" "}
+          <Link
+            href={routes.planned(companyId)}
+            className="underline underline-offset-2 hover:no-underline"
+          >
+            Ver em A pagar/receber
+          </Link>
         </Alert>
       )}
 
@@ -267,10 +273,10 @@ export default async function PainelPage({
             title="Proximos vencimentos"
             action={
               <Link
-                href={routes.transactions(companyId)}
+                href={routes.planned(companyId)}
                 className="text-primary text-xs underline-offset-2 hover:underline"
               >
-                ver lancamentos
+                ver a pagar/receber
               </Link>
             }
           />
