@@ -7,8 +7,8 @@ import {
   type StatementLine,
   type Transaction,
 } from "@aec/db";
-import { type BalanceCheck as BalanceCheckResult, checkBalance, fromDb } from "@aec/domain";
 
+import { type BalanceCheck, calcularProvaDeSaldo } from "@/lib/db/prova-de-saldo";
 import { requireAdvancedAccess } from "@/lib/db/session";
 import { createServerSupabase } from "@/lib/db/supabase";
 import { PERFIL_PARAM, resolvePerfilSelecao } from "@/lib/ui/account-profiles";
@@ -19,10 +19,7 @@ import { ReconciliationClient } from "./conciliacao-client";
 
 export const metadata = { title: "Conciliacao — Controle Bancario" };
 
-/** checkBalance's own result, plus the account name the screen displays it under. */
-export interface BalanceCheck extends BalanceCheckResult {
-  readonly accountName: string;
-}
+export type { BalanceCheck };
 
 export default async function ReconciliationPage({
   params,
@@ -43,8 +40,6 @@ export default async function ReconciliationPage({
     transactionsResult,
     categoriesResult,
     rulesResult,
-    importsResult,
-    realizedResult,
     perfis,
   ] = await Promise.all([
     supabase
@@ -89,25 +84,6 @@ export default async function ReconciliationPage({
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("priority"),
-    // Uma linha por conta: a que prova o saldo e a que declara o balanço MAIS
-    // RECENTE, nao a importacao mais recente. Alguem pode importar um
-    // extrato antigo (um backfill de marco) depois de ja ter importado um
-    // mais novo (maio) — nesse caso created_at do backfill e maior, mas
-    // statement_balance_date dele e menor, e e essa data que importa aqui.
-    supabase
-      .from("statement_imports")
-      .select("bank_account_id, statement_balance, statement_balance_date, created_at")
-      .eq("company_id", companyId)
-      .not("statement_balance", "is", null)
-      .order("statement_balance_date", { ascending: false })
-      .order("created_at", { ascending: false }),
-    // So o necessario para reconstruir o saldo: sem isso, a prova do saldo
-    // do extrato contra o saldo do sistema nao teria como ser feita.
-    supabase
-      .from("transactions")
-      .select("bank_account_id, booking_date, amount, status")
-      .eq("company_id", companyId)
-      .eq("status", "realizado"),
     listAccountProfiles(supabase, companyId),
   ]);
 
@@ -118,8 +94,6 @@ export default async function ReconciliationPage({
     transactionsResult,
     categoriesResult,
     rulesResult,
-    importsResult,
-    realizedResult,
   ]) {
     if (result.error) throw result.error;
   }
@@ -147,49 +121,7 @@ export default async function ReconciliationPage({
     noEscopo(account.id),
   );
 
-  const latestImportByAccount = new Map<string, { balance: string; date: string }>();
-  for (const row of importsResult.data ?? []) {
-    // Both columns are nullable in the schema — a statement import can, in
-    // principle, declare one without the other. The balance check needs both
-    // to mean anything, so an import missing either is skipped rather than
-    // treated as "no declared balance at all" for the account.
-    if (
-      !latestImportByAccount.has(row.bank_account_id) &&
-      row.statement_balance &&
-      row.statement_balance_date
-    ) {
-      latestImportByAccount.set(row.bank_account_id, {
-        balance: row.statement_balance,
-        date: row.statement_balance_date,
-      });
-    }
-  }
-
-  const entriesByAccount = new Map<
-    string,
-    { bookingDate: string; amount: number; status: "previsto" | "realizado" }[]
-  >();
-  for (const row of realizedResult.data ?? []) {
-    const list = entriesByAccount.get(row.bank_account_id) ?? [];
-    list.push({ bookingDate: row.booking_date, amount: fromDb(row.amount), status: row.status });
-    entriesByAccount.set(row.bank_account_id, list);
-  }
-
-  const balanceChecks: BalanceCheck[] = accounts.flatMap((account) => {
-    const declared = latestImportByAccount.get(account.id);
-    if (!declared) return [];
-
-    const result = checkBalance(
-      {
-        openingBalance: fromDb(account.opening_balance),
-        openingBalanceDate: account.opening_balance_date,
-      },
-      entriesByAccount.get(account.id) ?? [],
-      { bankAccountId: account.id, balance: fromDb(declared.balance), date: declared.date },
-    );
-
-    return [{ ...result, accountName: account.name }];
-  });
+  const balanceChecks = await calcularProvaDeSaldo(supabase, companyId, accounts);
 
   return (
     <div className="space-y-6">
