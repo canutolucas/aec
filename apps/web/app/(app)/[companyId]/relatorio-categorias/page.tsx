@@ -8,6 +8,7 @@ import { formatMonth } from "@/lib/ui/format";
 
 import { SubNav } from "../sub-nav";
 import { FiltroMesCategoria } from "./filtro-mes-categoria";
+import { RegimeToggle } from "./regime-toggle";
 
 export const metadata = { title: "Relatório por categoria — Controle Bancario" };
 
@@ -21,13 +22,17 @@ export const metadata = { title: "Relatório por categoria — Controle Bancario
  * indicadores de entradas/saidas do mes. Sem filtro de perfil: a view
  * agrega por categoria, nao por conta, entao nao ha bank_account_id pra
  * filtrar por perfil sem mudar a view.
+ *
+ * Caixa/competencia (nesta leva): a view sempre expos period_cash E
+ * period_accrual, e nenhuma tela consultava a segunda coluna — o corte por
+ * competencia que qualquer contador espera estava a um `eq()` de distancia.
  */
 export default async function RelatorioCategoriasPage({
   params,
   searchParams,
 }: {
   params: Promise<{ companyId: string }>;
-  searchParams: Promise<{ mes?: string }>;
+  searchParams: Promise<{ mes?: string; regime?: string }>;
 }) {
   const { companyId } = await params;
   const filtros = await searchParams;
@@ -36,13 +41,14 @@ export default async function RelatorioCategoriasPage({
   const hoje = todayInBrazil();
   const mes = filtros.mes ?? startOfMonth(hoje);
   const primeiroDia = startOfMonth(mes);
+  const regime = filtros.regime === "competencia" ? "competencia" : "caixa";
 
   const supabase = await createServerSupabase();
   const { data, error } = await supabase
     .from("v_monthly_category_summary")
     .select("*")
     .eq("company_id", companyId)
-    .eq("period_cash", primeiroDia)
+    .eq(regime === "competencia" ? "period_accrual" : "period_cash", primeiroDia)
     .eq("status", "realizado");
   if (error) throw error;
 
@@ -65,11 +71,16 @@ export default async function RelatorioCategoriasPage({
         <div>
           <h1 className="text-xl font-semibold">Por categoria</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Só o que já foi realizado em {formatMonth(primeiroDia)} — o mesmo recorte que o Painel
-            usa pros totais do mês.
+            Só o que já foi realizado em {formatMonth(primeiroDia)}
+            {regime === "competencia"
+              ? " — por competência: a que mês cada lançamento pertence, mesmo que o dinheiro tenha andado antes ou depois."
+              : " — por caixa: o mesmo recorte que o Painel usa pros totais do mês."}
           </p>
         </div>
-        <FiltroMesCategoria companyId={companyId} mes={primeiroDia} />
+        <div className="flex flex-wrap items-center gap-3">
+          <RegimeToggle companyId={companyId} mes={primeiroDia} regime={regime} />
+          <FiltroMesCategoria companyId={companyId} mes={primeiroDia} regime={filtros.regime} />
+        </div>
       </div>
 
       {linhas.length === 0 ? (

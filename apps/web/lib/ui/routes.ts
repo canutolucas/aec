@@ -31,6 +31,7 @@ export const routes = {
   team: (companyId: string) => `/${companyId}/equipe` as Route,
   reports: (companyId: string) => `/${companyId}/relatorios` as Route,
   categoryReport: (companyId: string) => `/${companyId}/relatorio-categorias` as Route,
+  monthlyEvolution: (companyId: string) => `/${companyId}/evolucao` as Route,
   auditLog: (companyId: string) => `/${companyId}/auditoria` as Route,
   reconciliation: (companyId: string) => `/${companyId}/conciliacao` as Route,
   planned: (companyId: string) => `/${companyId}/previstos` as Route,

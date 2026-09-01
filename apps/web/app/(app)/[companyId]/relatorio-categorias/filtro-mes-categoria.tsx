@@ -13,11 +13,19 @@ import { useRouter } from "next/navigation";
 import { formatMonth } from "@/lib/ui/format";
 import { routes, withQuery } from "@/lib/ui/routes";
 
-export function FiltroMesCategoria({ companyId, mes }: { companyId: string; mes: string }) {
+export function FiltroMesCategoria({
+  companyId,
+  mes,
+  regime,
+}: {
+  companyId: string;
+  mes: string;
+  regime?: string;
+}) {
   const router = useRouter();
 
   function navegar(novoMes: string) {
-    router.push(withQuery(routes.categoryReport(companyId), { mes: novoMes }));
+    router.push(withQuery(routes.categoryReport(companyId), { mes: novoMes, regime }));
   }
 
   const anterior = startOfMonth(addMonths(mes, -1));
